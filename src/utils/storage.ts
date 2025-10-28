@@ -14,9 +14,20 @@ export const loadState = (): AppState => {
     }
     const data = JSON.parse(serialized);
 
-    // Remove archivedItems if it exists (for backwards compatibility)
+    // Remove old fields for backwards compatibility
     if (data.archivedItems) {
       delete data.archivedItems;
+    }
+    if (data.collapsedSections) {
+      delete data.collapsedSections;
+    }
+
+    // Remove isUrgent and isImportant from stack items
+    if (data.stackItems) {
+      data.stackItems = data.stackItems.map((item: any) => {
+        const { isUrgent, isImportant, ...rest } = item;
+        return rest;
+      });
     }
 
     return data;

@@ -17,8 +17,6 @@ export interface StackItem {
   priority: 'low' | 'medium' | 'high' | null;
   dueDate: number | null;
   order: number;
-  isUrgent: boolean;
-  isImportant: boolean;
 }
 
 export interface AppState {

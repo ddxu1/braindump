@@ -119,8 +119,6 @@ export default function Home() {
       priority: null,
       dueDate: null,
       order: state.stackItems.length,
-      isUrgent: false,
-      isImportant: false,
     };
 
     setState(prev => ({
@@ -180,22 +178,17 @@ export default function Home() {
     }));
   };
 
-  const handleToggleUrgent = (id: string) => {
-    setState(prev => ({
-      ...prev,
-      stackItems: prev.stackItems.map(item =>
-        item.id === id ? { ...item, isUrgent: !item.isUrgent } : item
-      ),
-    }));
-  };
+  const handleClearAllStack = () => {
+    if (state.stackItems.length === 0) return;
 
-  const handleToggleImportant = (id: string) => {
-    setState(prev => ({
-      ...prev,
-      stackItems: prev.stackItems.map(item =>
-        item.id === id ? { ...item, isImportant: !item.isImportant } : item
-      ),
-    }));
+    const confirmed = window.confirm(`Are you sure you want to clear all ${state.stackItems.length} items from the Stack?`);
+    if (confirmed) {
+      playDeleteSound();
+      setState(prev => ({
+        ...prev,
+        stackItems: [],
+      }));
+    }
   };
 
   const handleImport = (importedState: AppState) => {
@@ -330,8 +323,7 @@ export default function Home() {
           items={state.stackItems}
           onDeleteItem={handleDeleteStackItem}
           onEditItem={handleEditStackItem}
-          onToggleUrgent={handleToggleUrgent}
-          onToggleImportant={handleToggleImportant}
+          onClearAll={handleClearAllStack}
         />
       </div>
 

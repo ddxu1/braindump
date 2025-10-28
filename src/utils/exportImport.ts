@@ -1,12 +1,8 @@
 import { AppState, StackItem } from '@/types';
-import { sortByPriority } from './prioritySort';
 
 export const exportToMarkdown = (stackItems: StackItem[]): void => {
-  // Sort items by priority
-  const sortedItems = sortByPriority(stackItems);
-
   // Generate markdown content - just the item text as a clean list
-  const lines = sortedItems.map(item => `- ${item.text}`);
+  const lines = stackItems.map(item => `- ${item.text}`);
   const markdown = lines.join('\n');
 
   // Create and download the file

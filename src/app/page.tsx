@@ -3,19 +3,22 @@
 import { useState, useEffect, useCallback } from 'react';
 import { StreamItem, StackItem, AppState } from '@/types';
 import { loadState, saveState, generateId } from '@/utils/storage';
+import { playDeleteSound } from '@/utils/sound';
 import StreamPane from '@/components/StreamPane';
 import StackPane from '@/components/StackPane';
 import ThemeToggle from '@/components/ThemeToggle';
 import ExportImport from '@/components/ExportImport';
+import ProcessingMode from '@/components/ProcessingMode';
 import './styles.css';
 
 export default function Home() {
   const [state, setState] = useState<AppState>({
     streamItems: [],
     stackItems: [],
-    archivedItems: [],
   });
   const [inputText, setInputText] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingIndex, setProcessingIndex] = useState(0);
 
   // Load state from localStorage on mount
   useEffect(() => {
@@ -32,6 +35,23 @@ export default function Home() {
     return () => clearTimeout(timeoutId);
   }, [state]);
 
+  // Global keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd/Ctrl + P to start processing mode
+      if ((e.metaKey || e.ctrlKey) && e.key === 'p') {
+        e.preventDefault();
+        const unprocessedCount = state.streamItems.filter(item => !item.processed).length;
+        if (unprocessedCount > 0 && !isProcessing) {
+          handleStartProcessing();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [state.streamItems, isProcessing]);
+
   // Convert input text to stream items
   const syncInputToItems = useCallback((text: string) => {
     const lines = text.split('\n').filter(line => line.trim() !== '');
@@ -46,7 +66,6 @@ export default function Home() {
           text: line,
           createdAt: Date.now(),
           processed: false,
-          completed: false,
           context: null,
           duplicateOf: null,
         });
@@ -69,16 +88,9 @@ export default function Home() {
     syncInputToItems(inputText);
   };
 
-  const handleCheckStreamItem = (id: string) => {
-    setState(prev => ({
-      ...prev,
-      streamItems: prev.streamItems.map(item =>
-        item.id === id ? { ...item, completed: !item.completed } : item
-      ),
-    }));
-  };
-
   const handleDeleteStreamItem = (id: string) => {
+    playDeleteSound();
+
     setState(prev => ({
       ...prev,
       streamItems: prev.streamItems.filter(item => item.id !== id),
@@ -106,8 +118,9 @@ export default function Home() {
       category: null,
       priority: null,
       dueDate: null,
-      completed: false,
       order: state.stackItems.length,
+      isUrgent: false,
+      isImportant: false,
     };
 
     setState(prev => ({
@@ -158,24 +171,30 @@ export default function Home() {
     }));
   };
 
-  const handleCheckStackItem = (id: string) => {
-    const stackItem = state.stackItems.find(item => item.id === id);
-    if (!stackItem) return;
-
-    if (!stackItem.completed) {
-      // Moving to archive
-      setState(prev => ({
-        ...prev,
-        stackItems: prev.stackItems.filter(item => item.id !== id),
-        archivedItems: [...prev.archivedItems, { ...stackItem, completed: true }],
-      }));
-    }
-  };
-
   const handleDeleteStackItem = (id: string) => {
+    playDeleteSound();
+
     setState(prev => ({
       ...prev,
       stackItems: prev.stackItems.filter(item => item.id !== id),
+    }));
+  };
+
+  const handleToggleUrgent = (id: string) => {
+    setState(prev => ({
+      ...prev,
+      stackItems: prev.stackItems.map(item =>
+        item.id === id ? { ...item, isUrgent: !item.isUrgent } : item
+      ),
+    }));
+  };
+
+  const handleToggleImportant = (id: string) => {
+    setState(prev => ({
+      ...prev,
+      stackItems: prev.stackItems.map(item =>
+        item.id === id ? { ...item, isImportant: !item.isImportant } : item
+      ),
     }));
   };
 
@@ -186,6 +205,94 @@ export default function Home() {
     // Update input text to match imported stream items
     const newInputText = importedState.streamItems.map(item => item.text).join('\n');
     setInputText(newInputText);
+  };
+
+  const handleMergeItems = (duplicateId: string, originalId: string) => {
+    setState(prev => {
+      const duplicateItem = prev.streamItems.find(item => item.id === duplicateId);
+      const originalItem = prev.streamItems.find(item => item.id === originalId);
+
+      if (!duplicateItem || !originalItem) return prev;
+
+      // Merge context if the duplicate has any
+      const mergedContext = duplicateItem.context
+        ? (originalItem.context ? `${originalItem.context}; ${duplicateItem.context}` : duplicateItem.context)
+        : originalItem.context;
+
+      return {
+        ...prev,
+        streamItems: prev.streamItems
+          .filter(item => item.id !== duplicateId)
+          .map(item =>
+            item.id === originalId
+              ? { ...item, context: mergedContext }
+              : item
+          ),
+      };
+    });
+
+    // Remove from input text
+    const itemToDelete = state.streamItems.find(item => item.id === duplicateId);
+    if (itemToDelete) {
+      const newText = inputText
+        .split('\n')
+        .filter(line => line !== itemToDelete.text)
+        .join('\n');
+      setInputText(newText);
+    }
+  };
+
+  const handleStartProcessing = () => {
+    setIsProcessing(true);
+    setProcessingIndex(0);
+  };
+
+  const handleCloseProcessing = () => {
+    setIsProcessing(false);
+    setProcessingIndex(0);
+  };
+
+  const getUnprocessedItems = () => {
+    return state.streamItems.filter(item => !item.processed);
+  };
+
+  const handleProcessingKeep = () => {
+    const unprocessedItems = getUnprocessedItems();
+    if (unprocessedItems.length > 0) {
+      const actualIndex = processingIndex % unprocessedItems.length;
+      const currentItem = unprocessedItems[actualIndex];
+      setState(prev => ({
+        ...prev,
+        streamItems: prev.streamItems.map(item =>
+          item.id === currentItem.id ? { ...item, processed: true } : item
+        ),
+      }));
+      setProcessingIndex(prev => prev + 1);
+    }
+  };
+
+  const handleProcessingMoveToStack = () => {
+    const unprocessedItems = getUnprocessedItems();
+    if (unprocessedItems.length > 0) {
+      const actualIndex = processingIndex % unprocessedItems.length;
+      const currentItem = unprocessedItems[actualIndex];
+      handleMoveToStack(currentItem.id);
+      // Don't increment index since the item was removed
+    }
+  };
+
+  const handleProcessingDelete = () => {
+    const unprocessedItems = getUnprocessedItems();
+    if (unprocessedItems.length > 0) {
+      const actualIndex = processingIndex % unprocessedItems.length;
+      const currentItem = unprocessedItems[actualIndex];
+      handleDeleteStreamItem(currentItem.id);
+      // Don't increment index since the item was removed
+    }
+  };
+
+  const handleProcessingSkip = () => {
+    setProcessingIndex(prev => prev + 1);
   };
 
   return (
@@ -212,19 +319,33 @@ export default function Home() {
           inputText={inputText}
           onInputChange={handleInputChange}
           onInputBlur={handleInputBlur}
-          onCheckItem={handleCheckStreamItem}
           onDeleteItem={handleDeleteStreamItem}
           onMoveToStack={handleMoveToStack}
           onAddContext={handleAddContext}
           onEditItem={handleEditStreamItem}
+          onMergeItems={handleMergeItems}
+          onStartProcessing={handleStartProcessing}
         />
         <StackPane
           items={state.stackItems}
-          onCheckItem={handleCheckStackItem}
           onDeleteItem={handleDeleteStackItem}
           onEditItem={handleEditStackItem}
+          onToggleUrgent={handleToggleUrgent}
+          onToggleImportant={handleToggleImportant}
         />
       </div>
+
+      {isProcessing && (
+        <ProcessingMode
+          items={getUnprocessedItems()}
+          currentIndex={processingIndex}
+          onKeep={handleProcessingKeep}
+          onMoveToStack={handleProcessingMoveToStack}
+          onDelete={handleProcessingDelete}
+          onSkip={handleProcessingSkip}
+          onClose={handleCloseProcessing}
+        />
+      )}
     </div>
   );
 }

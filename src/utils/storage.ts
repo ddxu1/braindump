@@ -4,18 +4,25 @@ const STORAGE_KEY = 'braindump-app-state';
 
 export const loadState = (): AppState => {
   if (typeof window === 'undefined') {
-    return { streamItems: [], stackItems: [], archivedItems: [] };
+    return { streamItems: [], stackItems: [] };
   }
 
   try {
     const serialized = localStorage.getItem(STORAGE_KEY);
     if (serialized === null) {
-      return { streamItems: [], stackItems: [], archivedItems: [] };
+      return { streamItems: [], stackItems: [] };
     }
-    return JSON.parse(serialized);
+    const data = JSON.parse(serialized);
+
+    // Remove archivedItems if it exists (for backwards compatibility)
+    if (data.archivedItems) {
+      delete data.archivedItems;
+    }
+
+    return data;
   } catch (err) {
     console.error('Failed to load state:', err);
-    return { streamItems: [], stackItems: [], archivedItems: [] };
+    return { streamItems: [], stackItems: [] };
   }
 };
 

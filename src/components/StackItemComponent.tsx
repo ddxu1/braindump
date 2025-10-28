@@ -5,16 +5,18 @@ import { useState } from 'react';
 
 interface StackItemComponentProps {
   item: StackItem;
-  onCheck: () => void;
   onDelete: () => void;
   onEditText: (text: string) => void;
+  onToggleUrgent: () => void;
+  onToggleImportant: () => void;
 }
 
 export default function StackItemComponent({
   item,
-  onCheck,
   onDelete,
   onEditText,
+  onToggleUrgent,
+  onToggleImportant,
 }: StackItemComponentProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(item.text);
@@ -39,16 +41,33 @@ export default function StackItemComponent({
   };
 
   return (
-    <div className={`stack-item ${item.completed ? 'completed' : ''}`}>
-      <div className="item-checkbox">
-        <input
-          type="checkbox"
-          checked={item.completed}
-          onChange={onCheck}
-        />
-      </div>
-
+    <div className="stack-item">
       <div className="item-content">
+        <div className="priority-controls">
+          <button
+            onClick={onDelete}
+            title="Delete"
+            className="priority-tag delete-tag"
+          >
+            ×
+          </button>
+          <button
+            onClick={onToggleUrgent}
+            className={`priority-tag ${item.isUrgent ? 'active urgent' : ''}`}
+            title="Urgent"
+          >
+            🔥
+          </button>
+          <button
+            onClick={onToggleImportant}
+            className={`priority-tag ${item.isImportant ? 'active important' : ''}`}
+            title="Important"
+          >
+            ⭐
+          </button>
+        </div>
+
+        <div className="item-content">
         {isEditing ? (
           <div className="text-edit-input">
             <input
@@ -84,6 +103,7 @@ export default function StackItemComponent({
             📅 {new Date(item.dueDate).toLocaleDateString()}
           </div>
         )}
+        </div>
       </div>
 
       {item.priority && (
@@ -93,14 +113,6 @@ export default function StackItemComponent({
           title={`${item.priority} priority`}
         />
       )}
-
-      <button
-        onClick={onDelete}
-        title="Delete"
-        className="delete-btn"
-      >
-        ×
-      </button>
     </div>
   );
 }

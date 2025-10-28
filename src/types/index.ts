@@ -4,7 +4,6 @@ export interface StreamItem {
   text: string;
   createdAt: number;
   processed: boolean;
-  completed: boolean;
   context: string | null;
   duplicateOf: string | null;
 }
@@ -17,12 +16,12 @@ export interface StackItem {
   category: string | null;
   priority: 'low' | 'medium' | 'high' | null;
   dueDate: number | null;
-  completed: boolean;
   order: number;
+  isUrgent: boolean;
+  isImportant: boolean;
 }
 
 export interface AppState {
   streamItems: StreamItem[];
   stackItems: StackItem[];
-  archivedItems: (StreamItem | StackItem)[];
 }

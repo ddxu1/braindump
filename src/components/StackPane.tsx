@@ -2,21 +2,24 @@
 
 import { StackItem } from '@/types';
 import StackItemComponent from './StackItemComponent';
+import { sortByPriority } from '@/utils/prioritySort';
 
 interface StackPaneProps {
   items: StackItem[];
-  onCheckItem: (id: string) => void;
   onDeleteItem: (id: string) => void;
   onEditItem: (id: string, text: string) => void;
+  onToggleUrgent: (id: string) => void;
+  onToggleImportant: (id: string) => void;
 }
 
 export default function StackPane({
   items,
-  onCheckItem,
   onDeleteItem,
   onEditItem,
+  onToggleUrgent,
+  onToggleImportant,
 }: StackPaneProps) {
-  const sortedItems = [...items].sort((a, b) => a.order - b.order);
+  const sortedItems = sortByPriority(items);
 
   return (
     <div className="stack-pane">
@@ -35,9 +38,10 @@ export default function StackPane({
             <StackItemComponent
               key={item.id}
               item={item}
-              onCheck={() => onCheckItem(item.id)}
               onDelete={() => onDeleteItem(item.id)}
               onEditText={(text) => onEditItem(item.id, text)}
+              onToggleUrgent={() => onToggleUrgent(item.id)}
+              onToggleImportant={() => onToggleImportant(item.id)}
             />
           ))
         )}

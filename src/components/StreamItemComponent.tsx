@@ -5,20 +5,24 @@ import { useState } from 'react';
 
 interface StreamItemComponentProps {
   item: StreamItem;
-  onCheck: () => void;
   onDelete: () => void;
   onMoveToStack: () => void;
   onAddContext: (context: string) => void;
   onEditText: (text: string) => void;
+  isDuplicate?: boolean;
+  duplicateOfText?: string;
+  onMerge?: () => void;
 }
 
 export default function StreamItemComponent({
   item,
-  onCheck,
   onDelete,
   onMoveToStack,
   onAddContext,
   onEditText,
+  isDuplicate = false,
+  duplicateOfText,
+  onMerge,
 }: StreamItemComponentProps) {
   const [showContextInput, setShowContextInput] = useState(false);
   const [contextText, setContextText] = useState(item.context || '');
@@ -40,15 +44,18 @@ export default function StreamItemComponent({
   const isOld = Date.now() - item.createdAt > 24 * 60 * 60 * 1000; // 24 hours
 
   return (
-    <div className={`stream-item ${item.completed ? 'completed' : ''}`}>
+    <div className={`stream-item ${isDuplicate ? 'duplicate' : ''}`}>
+      {isDuplicate && duplicateOfText && (
+        <div className="duplicate-indicator">
+          Duplicate of: "{duplicateOfText}"
+          {onMerge && (
+            <button onClick={onMerge} className="merge-btn">
+              Merge
+            </button>
+          )}
+        </div>
+      )}
       <div className="item-actions">
-        <button
-          onClick={onCheck}
-          title="Complete"
-          className="action-btn check-btn"
-        >
-          ✓
-        </button>
         <button
           onClick={onMoveToStack}
           title="Move to Stack"

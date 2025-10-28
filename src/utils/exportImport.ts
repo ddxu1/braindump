@@ -1,4 +1,26 @@
-import { AppState } from '@/types';
+import { AppState, StackItem } from '@/types';
+import { sortByPriority } from './prioritySort';
+
+export const exportToMarkdown = (stackItems: StackItem[]): void => {
+  // Sort items by priority
+  const sortedItems = sortByPriority(stackItems);
+
+  // Generate markdown content - just the item text as a clean list
+  const lines = sortedItems.map(item => `- ${item.text}`);
+  const markdown = lines.join('\n');
+
+  // Create and download the file
+  const blob = new Blob([markdown], { type: 'text/markdown' });
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `braindump-${new Date().toISOString().split('T')[0]}.md`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
 
 export const exportToJSON = (state: AppState): void => {
   const dataStr = JSON.stringify(state, null, 2);
@@ -28,7 +50,7 @@ export const importFromJSON = (file: File): Promise<AppState> => {
         const data = JSON.parse(result) as AppState;
 
         // Validate the structure
-        if (!data.streamItems || !data.stackItems || !data.archivedItems) {
+        if (!data.streamItems || !data.stackItems) {
           throw new Error('Invalid backup file structure');
         }
 

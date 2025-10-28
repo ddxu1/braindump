@@ -1,7 +1,7 @@
 'use client';
 
 import { AppState } from '@/types';
-import { exportToJSON, importFromJSON } from '@/utils/exportImport';
+import { exportToJSON, exportToMarkdown, importFromJSON } from '@/utils/exportImport';
 import { useRef, useState } from 'react';
 
 interface ExportImportProps {
@@ -22,6 +22,18 @@ export default function ExportImport({ state, onImport }: ExportImportProps) {
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       setError('Failed to export backup');
+      console.error(err);
+    }
+  };
+
+  const handleMarkdownExport = () => {
+    try {
+      exportToMarkdown(state.stackItems);
+      setSuccess('Markdown exported successfully!');
+      setError(null);
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      setError('Failed to export markdown');
       console.error(err);
     }
   };
@@ -53,6 +65,13 @@ export default function ExportImport({ state, onImport }: ExportImportProps) {
 
   return (
     <div className="export-import">
+      <button
+        onClick={handleMarkdownExport}
+        className="markdown-btn icon-btn"
+        title="Export Stack as Markdown"
+      >
+        📝
+      </button>
       <button
         onClick={handleExport}
         className="export-btn icon-btn"

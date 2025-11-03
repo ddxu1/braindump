@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { StreamItem, StackItem, AppState } from '@/types';
 import { loadState, saveState, generateId } from '@/utils/storage';
 import { playDeleteSound } from '@/utils/sound';
+import { UndoManager, HistoryAction } from '@/utils/undo';
 import StreamPane from '@/components/StreamPane';
 import StackPane from '@/components/StackPane';
 import ThemeToggle from '@/components/ThemeToggle';
@@ -19,6 +20,9 @@ export default function Home() {
   const [inputText, setInputText] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingIndex, setProcessingIndex] = useState(0);
+  const [undoMessage, setUndoMessage] = useState<string | null>(null);
+  const undoManager = useRef(new UndoManager());
+  const canUndo = undoManager.current.canUndo();
 
   // Load state from localStorage on mount
   useEffect(() => {
@@ -35,9 +39,41 @@ export default function Home() {
     return () => clearTimeout(timeoutId);
   }, [state]);
 
+  // Helper to save state for undo
+  const saveForUndo = (type: HistoryAction['type'], description: string) => {
+    undoManager.current.push({
+      type,
+      description,
+      previousState: { ...state },
+      timestamp: Date.now(),
+    });
+  };
+
+  // Undo handler
+  const handleUndo = () => {
+    const action = undoManager.current.pop();
+    if (action) {
+      setState(action.previousState);
+      setUndoMessage(`Undid: ${action.description}`);
+      setTimeout(() => setUndoMessage(null), 3000);
+
+      // Update input text if stream items changed
+      const newInputText = action.previousState.streamItems.map(item => item.text).join('\n');
+      setInputText(newInputText);
+    }
+  };
+
   // Global keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd/Ctrl + Z for undo
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        if (undoManager.current.canUndo()) {
+          handleUndo();
+        }
+      }
+
       // Cmd/Ctrl + P to start processing mode
       if ((e.metaKey || e.ctrlKey) && e.key === 'p') {
         e.preventDefault();
@@ -89,6 +125,11 @@ export default function Home() {
   };
 
   const handleDeleteStreamItem = (id: string) => {
+    const itemToDelete = state.streamItems.find(item => item.id === id);
+    if (itemToDelete) {
+      saveForUndo('delete-stream', `Delete "${itemToDelete.text.substring(0, 30)}..."`);
+    }
+
     playDeleteSound();
 
     setState(prev => ({
@@ -97,7 +138,6 @@ export default function Home() {
     }));
 
     // Also remove from input text
-    const itemToDelete = state.streamItems.find(item => item.id === id);
     if (itemToDelete) {
       const newText = inputText
         .split('\n')
@@ -110,6 +150,8 @@ export default function Home() {
   const handleMoveToStack = (id: string) => {
     const streamItem = state.streamItems.find(item => item.id === id);
     if (!streamItem) return;
+
+    saveForUndo('move-to-stack', `Move "${streamItem.text.substring(0, 30)}..." to Stack`);
 
     const stackItem: StackItem = {
       id: generateId(),
@@ -170,6 +212,11 @@ export default function Home() {
   };
 
   const handleDeleteStackItem = (id: string) => {
+    const itemToDelete = state.stackItems.find(item => item.id === id);
+    if (itemToDelete) {
+      saveForUndo('delete-stack', `Delete "${itemToDelete.text.substring(0, 30)}..."`);
+    }
+
     playDeleteSound();
 
     setState(prev => ({
@@ -183,12 +230,21 @@ export default function Home() {
 
     const confirmed = window.confirm(`Are you sure you want to clear all ${state.stackItems.length} items from the Stack?`);
     if (confirmed) {
+      saveForUndo('clear-all', `Clear all ${state.stackItems.length} items from Stack`);
       playDeleteSound();
       setState(prev => ({
         ...prev,
         stackItems: [],
       }));
     }
+  };
+
+  const handleReorderStack = (reorderedItems: StackItem[]) => {
+    saveForUndo('reorder', 'Reorder Stack items');
+    setState(prev => ({
+      ...prev,
+      stackItems: reorderedItems,
+    }));
   };
 
   const handleImport = (importedState: AppState) => {
@@ -300,10 +356,23 @@ export default function Home() {
             </div>
           </div>
           <div className="header-actions">
+            <button
+              onClick={handleUndo}
+              disabled={!canUndo}
+              className="undo-btn icon-btn"
+              title={`Undo${canUndo ? ' (Ctrl/Cmd+Z)' : ''}`}
+            >
+              ↶
+            </button>
             <ExportImport state={state} onImport={handleImport} />
             <ThemeToggle />
           </div>
         </div>
+        {undoMessage && (
+          <div className="undo-toast">
+            {undoMessage}
+          </div>
+        )}
       </header>
 
       <div className="main-layout">
@@ -324,6 +393,7 @@ export default function Home() {
           onDeleteItem={handleDeleteStackItem}
           onEditItem={handleEditStackItem}
           onClearAll={handleClearAllStack}
+          onReorder={handleReorderStack}
         />
       </div>
 

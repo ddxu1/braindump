@@ -1,21 +1,41 @@
 import { AppState, StackItem } from '@/types';
 
-export const exportToMarkdown = (stackItems: StackItem[]): void => {
+export const exportToMarkdown = async (stackItems: StackItem[]): Promise<void> => {
   // Generate markdown content - just the item text as a clean list
-  const lines = stackItems.map(item => `- ${item.text}`);
+  const lines = stackItems.map(item => `- [ ] ${item.text}`);
   const markdown = lines.join('\n');
 
-  // Create and download the file
-  const blob = new Blob([markdown], { type: 'text/markdown' });
-  const url = URL.createObjectURL(blob);
+  // Copy to clipboard
+  try {
+    await navigator.clipboard.writeText(markdown);
 
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `braindump-${new Date().toISOString().split('T')[0]}.md`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+    // Show temporary alert
+    const alert = document.createElement('div');
+    alert.textContent = 'Copied to clipboard!';
+    alert.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #10b981;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-weight: 500;
+      z-index: 9999;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      animation: slideIn 0.3s ease-out;
+    `;
+
+    document.body.appendChild(alert);
+
+    // Remove after 2 seconds
+    setTimeout(() => {
+      alert.style.animation = 'slideOut 0.3s ease-out';
+      setTimeout(() => document.body.removeChild(alert), 300);
+    }, 2000);
+  } catch (error) {
+    console.error('Failed to copy to clipboard:', error);
+  }
 };
 
 export const exportToJSON = (state: AppState): void => {

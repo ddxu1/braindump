@@ -2,6 +2,8 @@
 
 import { StackItem } from '@/types';
 import { useState } from 'react';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface StackItemComponentProps {
   item: StackItem;
@@ -16,6 +18,15 @@ export default function StackItemComponent({
 }: StackItemComponentProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(item.text);
+
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: item.id });
 
   const handleTextEdit = () => {
     if (editText.trim() !== '') {
@@ -36,8 +47,17 @@ export default function StackItemComponent({
     }
   };
 
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
   return (
-    <div className="stack-item">
+    <div className="stack-item" ref={setNodeRef} style={style}>
+      <div className="drag-handle" {...attributes} {...listeners} title="Drag to reorder">
+        ⋮⋮
+      </div>
       <div className="item-content">
         {isEditing ? (
           <div className="text-edit-input">

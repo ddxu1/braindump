@@ -90,6 +90,45 @@ body {
   align-items: center;
 }
 
+.undo-btn {
+  font-size: 1.5rem;
+  line-height: 1;
+  padding: 0.5rem;
+  opacity: 1;
+}
+
+.undo-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.undo-toast {
+  position: fixed;
+  top: 5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--accent);
+  color: white;
+  padding: 0.75rem 1.5rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
 .app-header h1 {
   font-size: 2rem;
   margin-bottom: 0.25rem;
@@ -495,6 +534,61 @@ body {
   color: white;
 }
 
+/* Search */
+.search-container {
+  margin-top: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  position: relative;
+}
+
+.search-input {
+  flex: 1;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--bg-elevated);
+}
+
+.search-input::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
+.search-clear {
+  position: absolute;
+  right: 5.5rem;
+  padding: 0.2rem 0.4rem;
+  font-size: 1.2rem;
+  font-weight: bold;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color 0.2s;
+  line-height: 1;
+}
+
+.search-clear:hover {
+  color: var(--text-primary);
+}
+
+.search-count {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
 .empty-state {
   text-align: center;
   padding: 3rem 1rem;
@@ -579,6 +673,29 @@ body {
   background: var(--danger);
   border-color: var(--danger);
   color: white;
+}
+
+/* Drag Handle Styles */
+.drag-handle {
+  padding: 0.2rem 0.3rem;
+  cursor: grab;
+  color: var(--text-tertiary);
+  font-size: 0.9rem;
+  line-height: 1;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s;
+  flex-shrink: 0;
+}
+
+.drag-handle:hover {
+  color: var(--accent);
+}
+
+.drag-handle:active {
+  cursor: grabbing;
 }
 
 /* Processing Mode Styles */
@@ -799,5 +916,28 @@ body {
     width: 40px;
     height: 40px;
     font-size: 1.25rem;
+  }
+}
+
+/* Toast Animation */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(100px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideOut {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(100px);
   }
 }

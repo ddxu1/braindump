@@ -26,15 +26,13 @@ export default function ExportImport({ state, onImport }: ExportImportProps) {
     }
   };
 
-  const handleMarkdownExport = () => {
+  const handleMarkdownExport = async () => {
     try {
-      exportToMarkdown(state.stackItems);
-      setSuccess('Markdown exported successfully!');
-      setError(null);
-      setTimeout(() => setSuccess(null), 3000);
+      await exportToMarkdown(state.stackItems);
     } catch (err) {
-      setError('Failed to export markdown');
+      setError('Failed to copy to clipboard');
       console.error(err);
+      setTimeout(() => setError(null), 3000);
     }
   };
 

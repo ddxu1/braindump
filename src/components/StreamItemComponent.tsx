@@ -2,6 +2,7 @@
 
 import { StreamItem } from '@/types';
 import { useState } from 'react';
+import { ArrowRightIcon, CloseIcon, HelpIcon, MoreIcon, NoteIcon } from './Icons';
 
 interface StreamItemComponentProps {
   item: StreamItem;
@@ -41,13 +42,13 @@ export default function StreamItemComponent({
     setIsEditing(false);
   };
 
-  const isOld = Date.now() - item.createdAt > 24 * 60 * 60 * 1000; // 24 hours
+  const isOld = Date.now() - item.createdAt > 24 * 60 * 60 * 1000;
 
   return (
     <div className={`stream-item ${isDuplicate ? 'duplicate' : ''}`}>
       {isDuplicate && duplicateOfText && (
         <div className="duplicate-indicator">
-          Duplicate of: "{duplicateOfText}"
+          Duplicate of: &ldquo;{duplicateOfText}&rdquo;
           {onMerge && (
             <button onClick={onMerge} className="merge-btn">
               Merge
@@ -58,28 +59,31 @@ export default function StreamItemComponent({
       <div className="item-actions">
         <button
           onClick={onMoveToStack}
-          title="Move to Stack"
+          data-tooltip="Move to Stack"
+          aria-label="Move to Stack"
           className="action-btn move-btn"
         >
-          →
+          <ArrowRightIcon />
         </button>
         <button
           onClick={onDelete}
-          title="Delete"
+          data-tooltip="Delete"
+          aria-label="Delete"
           className="action-btn delete-btn"
         >
-          ×
+          <CloseIcon />
         </button>
         <button
           onClick={() => setShowContextInput(!showContextInput)}
-          title="Add context"
+          data-tooltip="Add context"
+          aria-label="Add context"
           className="action-btn more-btn"
         >
-          ⋮
+          <MoreIcon />
         </button>
         {isOld && !item.context && (
-          <span className="context-reminder" title="Add context for clarity">
-            ?
+          <span className="context-reminder" data-tooltip="Add context for clarity">
+            <HelpIcon />
           </span>
         )}
       </div>
@@ -105,7 +109,10 @@ export default function StreamItemComponent({
       )}
 
       {item.context && !showContextInput && (
-        <div className="item-context">📝 {item.context}</div>
+        <div className="item-context">
+          <NoteIcon />
+          <span>{item.context}</span>
+        </div>
       )}
 
       {showContextInput && (

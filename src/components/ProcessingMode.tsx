@@ -22,19 +22,20 @@ export default function ProcessingMode({
   onSkip,
   onClose,
 }: ProcessingModeProps) {
-  // Keyboard shortcuts
+  // Keyboard shortcuts: A=keep, S=delete, D=move, W=skip
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'k' || e.key === 'K') {
+      const k = e.key.toLowerCase();
+      if (k === 'a') {
         e.preventDefault();
         onKeep();
-      } else if (e.key === 'm' || e.key === 'M') {
+      } else if (k === 'd') {
         e.preventDefault();
         onMoveToStack();
-      } else if (e.key === 'd' || e.key === 'D') {
+      } else if (k === 's') {
         e.preventDefault();
         onDelete();
-      } else if (e.key === 's' || e.key === 'S') {
+      } else if (k === 'w') {
         e.preventDefault();
         onSkip();
       } else if (e.key === 'Escape') {
@@ -57,7 +58,7 @@ export default function ProcessingMode({
           </div>
           <div className="processing-item">
             <div className="processing-item-text">
-              All items have been processed. Great job! 🎉
+              All items have been processed.
             </div>
           </div>
           <div className="processing-actions">
@@ -83,7 +84,13 @@ export default function ProcessingMode({
           <div className="processing-progress">
             Item {actualIndex + 1} of {items.length}
           </div>
-          <button onClick={onClose} className="close-processing" title="Press Esc to close">×</button>
+          <button
+            onClick={onClose}
+            className="close-processing"
+            data-tooltip="Close (Esc)"
+            data-tooltip-position="left"
+            aria-label="Close"
+          >×</button>
         </div>
 
         <div className="processing-item">
@@ -98,19 +105,19 @@ export default function ProcessingMode({
 
         <div className="processing-actions">
           <button onClick={onKeep} className="processing-btn keep">
-            <span className="shortcut">K</span>
+            <span className="shortcut">A</span>
             Keep in Stream
           </button>
-          <button onClick={onMoveToStack} className="processing-btn move">
-            <span className="shortcut">M</span>
-            Move to Stack
-          </button>
           <button onClick={onDelete} className="processing-btn delete">
-            <span className="shortcut">D</span>
+            <span className="shortcut">S</span>
             Delete
           </button>
+          <button onClick={onMoveToStack} className="processing-btn move">
+            <span className="shortcut">D</span>
+            Move to Stack
+          </button>
           <button onClick={onSkip} className="processing-btn skip">
-            <span className="shortcut">S</span>
+            <span className="shortcut">W</span>
             Skip
           </button>
         </div>

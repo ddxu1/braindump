@@ -1,8 +1,9 @@
 'use client';
 
 import { AppState } from '@/types';
-import { exportToJSON, exportToMarkdown, importFromJSON } from '@/utils/exportImport';
+import { exportToJSON, importFromJSON } from '@/utils/exportImport';
 import { useRef, useState } from 'react';
+import { DownloadIcon, UploadIcon } from './Icons';
 
 interface ExportImportProps {
   state: AppState;
@@ -17,22 +18,12 @@ export default function ExportImport({ state, onImport }: ExportImportProps) {
   const handleExport = () => {
     try {
       exportToJSON(state);
-      setSuccess('Backup exported successfully!');
+      setSuccess('Backup exported');
       setError(null);
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       setError('Failed to export backup');
       console.error(err);
-    }
-  };
-
-  const handleMarkdownExport = async () => {
-    try {
-      await exportToMarkdown(state.stackItems);
-    } catch (err) {
-      setError('Failed to copy to clipboard');
-      console.error(err);
-      setTimeout(() => setError(null), 3000);
     }
   };
 
@@ -47,7 +38,7 @@ export default function ExportImport({ state, onImport }: ExportImportProps) {
     try {
       const importedState = await importFromJSON(file);
       onImport(importedState);
-      setSuccess('Backup imported successfully!');
+      setSuccess('Backup imported');
       setError(null);
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
@@ -55,7 +46,6 @@ export default function ExportImport({ state, onImport }: ExportImportProps) {
       console.error(err);
     }
 
-    // Reset file input
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -64,25 +54,22 @@ export default function ExportImport({ state, onImport }: ExportImportProps) {
   return (
     <div className="export-import">
       <button
-        onClick={handleMarkdownExport}
-        className="markdown-btn icon-btn"
-        title="Export Stack as Markdown"
-      >
-        📝
-      </button>
-      <button
         onClick={handleExport}
         className="export-btn icon-btn"
-        title="Export backup as JSON"
+        data-tooltip="Download backup (JSON)"
+        data-tooltip-position="bottom"
+        aria-label="Download backup"
       >
-        ⬇
+        <DownloadIcon />
       </button>
       <button
         onClick={handleImportClick}
         className="import-btn icon-btn"
-        title="Import backup from JSON"
+        data-tooltip="Import backup (JSON)"
+        data-tooltip-position="bottom"
+        aria-label="Import backup"
       >
-        ⬆
+        <UploadIcon />
       </button>
       <input
         ref={fileInputRef}

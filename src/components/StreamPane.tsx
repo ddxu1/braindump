@@ -4,6 +4,7 @@ import { StreamItem } from '@/types';
 import { useState, useEffect, useMemo } from 'react';
 import StreamItemComponent from './StreamItemComponent';
 import { findDuplicates } from '@/utils/duplicateDetection';
+import { CheckIcon, SparkleIcon } from './Icons';
 
 interface StreamPaneProps {
   items: StreamItem[];
@@ -16,6 +17,10 @@ interface StreamPaneProps {
   onEditItem: (id: string, text: string) => void;
   onMergeItems: (duplicateId: string, originalId: string) => void;
   onStartProcessing?: () => void;
+  onAIEdit?: () => void;
+  aiEditing?: boolean;
+  aiMessage?: string | null;
+  aiError?: string | null;
 }
 
 export default function StreamPane({
@@ -29,10 +34,13 @@ export default function StreamPane({
   onEditItem,
   onMergeItems,
   onStartProcessing,
+  onAIEdit,
+  aiEditing = false,
+  aiMessage,
+  aiError,
 }: StreamPaneProps) {
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
 
-  // Calculate duplicates
   const duplicates = useMemo(() => findDuplicates(items), [items]);
 
   useEffect(() => {
@@ -43,40 +51,31 @@ export default function StreamPane({
 
   const unprocessedCount = items.filter(item => !item.processed).length;
 
-  // Handle paste event to clean up common formatting
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     e.preventDefault();
 
-    // Get the pasted text
     const pastedText = e.clipboardData.getData('text');
 
-    // Clean up common bullet point and checkbox formats
     const cleanedText = pastedText
       .split('\n')
       .map(line => {
-        // Remove common prefixes from Apple Notes, Obsidian, Notion, etc.
         let cleaned = line;
 
-        // First, handle checkboxes (must be before simple bullets)
-        cleaned = cleaned.replace(/^[\s]*[-*]\s*\[\s*[xX✓]\s*]\s*/, '');  // "- [x] " or "* [X] " (checked)
-        cleaned = cleaned.replace(/^[\s]*[-*]\s*\[\s*]\s*/, '');   // "- [ ] " or "* [ ] " (unchecked)
+        cleaned = cleaned.replace(/^[\s]*[-*]\s*\[\s*[xX✓]\s*]\s*/, '');
+        cleaned = cleaned.replace(/^[\s]*[-*]\s*\[\s*]\s*/, '');
 
-        // Then handle simple bullets
-        cleaned = cleaned.replace(/^[\s]*[-*•]\s+/, '');           // "- " or "* " or "• "
+        cleaned = cleaned.replace(/^[\s]*[-*•]\s+/, '');
 
-        // Handle numbered lists
-        cleaned = cleaned.replace(/^[\s]*\d+\.\s+/, '');           // "1. " numbered lists
+        cleaned = cleaned.replace(/^[\s]*\d+\.\s+/, '');
 
         return cleaned.trim();
       })
       .join('\n');
 
-    // Get current cursor position
     const textarea = e.currentTarget;
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
 
-    // Insert cleaned text at cursor position
     const newValue =
       inputText.substring(0, start) +
       cleanedText +
@@ -84,7 +83,6 @@ export default function StreamPane({
 
     onInputChange(newValue);
 
-    // Set cursor position after pasted text
     setTimeout(() => {
       textarea.selectionStart = textarea.selectionEnd = start + cleanedText.length;
     }, 0);
@@ -94,23 +92,42 @@ export default function StreamPane({
     <div className="stream-pane">
       <div className="stream-header">
         <h2>STREAM</h2>
-        <p className="subtitle">Brain Dump Zone</p>
         {lastSaved && (
           <div className="save-indicator">
-            ✓ Saved {lastSaved.toLocaleTimeString()}
+            <CheckIcon />
+            <span>Saved {lastSaved.toLocaleTimeString()}</span>
           </div>
         )}
       </div>
 
-      {onStartProcessing && (
-        <button
-          className="process-stream-btn"
-          onClick={onStartProcessing}
-          disabled={unprocessedCount === 0}
-        >
-          Process Stream ({unprocessedCount} items)
-        </button>
-      )}
+      <div className="stream-actions">
+        {onStartProcessing && (
+          <button
+            className="process-stream-btn"
+            onClick={onStartProcessing}
+            disabled={unprocessedCount === 0}
+            data-tooltip="Step through items one at a time (Cmd/Ctrl+P)"
+            data-tooltip-position="bottom"
+          >
+            Process Stream ({unprocessedCount} items)
+          </button>
+        )}
+        {onAIEdit && (
+          <button
+            className="ai-edit-btn"
+            onClick={onAIEdit}
+            disabled={aiEditing || items.length === 0}
+            data-tooltip={aiEditing ? 'AI editing…' : 'AI Edit — clean up notes and find duplicates'}
+            data-tooltip-position="bottom"
+            aria-label="AI Edit"
+          >
+            <SparkleIcon size={18} />
+          </button>
+        )}
+      </div>
+
+      {aiError && <div className="message error-message inline">{aiError}</div>}
+      {aiMessage && <div className="message success-message inline">{aiMessage}</div>}
 
       <div className="input-area">
         <textarea
@@ -120,7 +137,6 @@ export default function StreamPane({
           onPaste={handlePaste}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
-              // Small delay to let the newline character be added first
               setTimeout(() => onInputBlur(), 0);
             }
           }}

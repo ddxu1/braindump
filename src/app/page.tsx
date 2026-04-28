@@ -3,13 +3,17 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { StreamItem, StackItem, AppState } from '@/types';
 import { loadState, saveState, generateId } from '@/utils/storage';
-import { playDeleteSound } from '@/utils/sound';
+import { loadSettings } from '@/utils/settings';
+import { cleanupWithGrok } from '@/utils/grok';
+import { copyStackToClipboard } from '@/utils/exportImport';
 import { UndoManager, HistoryAction } from '@/utils/undo';
 import StreamPane from '@/components/StreamPane';
 import StackPane from '@/components/StackPane';
 import ThemeToggle from '@/components/ThemeToggle';
 import ExportImport from '@/components/ExportImport';
 import ProcessingMode from '@/components/ProcessingMode';
+import Settings from '@/components/Settings';
+import { BrainIcon, CopyIcon, UndoIcon } from '@/components/Icons';
 import './styles.css';
 
 export default function Home() {
@@ -21,16 +25,17 @@ export default function Home() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingIndex, setProcessingIndex] = useState(0);
   const [undoMessage, setUndoMessage] = useState<string | null>(null);
+  const [aiEditing, setAiEditing] = useState(false);
+  const [aiMessage, setAiMessage] = useState<string | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
   const undoManager = useRef(new UndoManager());
   const canUndo = undoManager.current.canUndo();
 
-  // Load state from localStorage on mount
   useEffect(() => {
     const loadedState = loadState();
     setState(loadedState);
   }, []);
 
-  // Auto-save with debounce
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       saveState(state);
@@ -39,7 +44,6 @@ export default function Home() {
     return () => clearTimeout(timeoutId);
   }, [state]);
 
-  // Helper to save state for undo
   const saveForUndo = (type: HistoryAction['type'], description: string) => {
     undoManager.current.push({
       type,
@@ -49,7 +53,6 @@ export default function Home() {
     });
   };
 
-  // Undo handler
   const handleUndo = () => {
     const action = undoManager.current.pop();
     if (action) {
@@ -57,16 +60,13 @@ export default function Home() {
       setUndoMessage(`Undid: ${action.description}`);
       setTimeout(() => setUndoMessage(null), 3000);
 
-      // Update input text if stream items changed
       const newInputText = action.previousState.streamItems.map(item => item.text).join('\n');
       setInputText(newInputText);
     }
   };
 
-  // Global keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Cmd/Ctrl + Z for undo
       if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
         if (undoManager.current.canUndo()) {
@@ -74,7 +74,6 @@ export default function Home() {
         }
       }
 
-      // Cmd/Ctrl + P to start processing mode
       if ((e.metaKey || e.ctrlKey) && e.key === 'p') {
         e.preventDefault();
         const unprocessedCount = state.streamItems.filter(item => !item.processed).length;
@@ -88,12 +87,10 @@ export default function Home() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [state.streamItems, isProcessing]);
 
-  // Convert input text to stream items
   const syncInputToItems = useCallback((text: string) => {
     const lines = text.split('\n').filter(line => line.trim() !== '');
     const existingTexts = state.streamItems.map(item => item.text);
 
-    // Add new items for new lines
     const newItems: StreamItem[] = [];
     lines.forEach(line => {
       if (!existingTexts.includes(line)) {
@@ -130,14 +127,11 @@ export default function Home() {
       saveForUndo('delete-stream', `Delete "${itemToDelete.text.substring(0, 30)}..."`);
     }
 
-    playDeleteSound();
-
     setState(prev => ({
       ...prev,
       streamItems: prev.streamItems.filter(item => item.id !== id),
     }));
 
-    // Also remove from input text
     if (itemToDelete) {
       const newText = inputText
         .split('\n')
@@ -169,7 +163,6 @@ export default function Home() {
       stackItems: [...prev.stackItems, stackItem],
     }));
 
-    // Remove from input text
     const newText = inputText
       .split('\n')
       .filter(line => line !== streamItem.text)
@@ -194,7 +187,6 @@ export default function Home() {
       ),
     }));
 
-    // Also update the input text
     const updatedItems = state.streamItems.map(item =>
       item.id === id ? { ...item, text } : item
     );
@@ -217,8 +209,6 @@ export default function Home() {
       saveForUndo('delete-stack', `Delete "${itemToDelete.text.substring(0, 30)}..."`);
     }
 
-    playDeleteSound();
-
     setState(prev => ({
       ...prev,
       stackItems: prev.stackItems.filter(item => item.id !== id),
@@ -231,7 +221,6 @@ export default function Home() {
     const confirmed = window.confirm(`Are you sure you want to clear all ${state.stackItems.length} items from the Stack?`);
     if (confirmed) {
       saveForUndo('clear-all', `Clear all ${state.stackItems.length} items from Stack`);
-      playDeleteSound();
       setState(prev => ({
         ...prev,
         stackItems: [],
@@ -251,7 +240,6 @@ export default function Home() {
     setState(importedState);
     saveState(importedState);
 
-    // Update input text to match imported stream items
     const newInputText = importedState.streamItems.map(item => item.text).join('\n');
     setInputText(newInputText);
   };
@@ -263,7 +251,6 @@ export default function Home() {
 
       if (!duplicateItem || !originalItem) return prev;
 
-      // Merge context if the duplicate has any
       const mergedContext = duplicateItem.context
         ? (originalItem.context ? `${originalItem.context}; ${duplicateItem.context}` : duplicateItem.context)
         : originalItem.context;
@@ -280,7 +267,6 @@ export default function Home() {
       };
     });
 
-    // Remove from input text
     const itemToDelete = state.streamItems.find(item => item.id === duplicateId);
     if (itemToDelete) {
       const newText = inputText
@@ -288,6 +274,88 @@ export default function Home() {
         .filter(line => line !== itemToDelete.text)
         .join('\n');
       setInputText(newText);
+    }
+  };
+
+  const handleAIEdit = async () => {
+    setAiError(null);
+    setAiMessage(null);
+
+    const settings = loadSettings();
+    if (!settings.grokApiKey) {
+      setAiError('Add your Grok API key in Settings first.');
+      setTimeout(() => setAiError(null), 4000);
+      return;
+    }
+    if (state.streamItems.length === 0) return;
+
+    setAiEditing(true);
+    try {
+      const result = await cleanupWithGrok(
+        state.streamItems.map(item => ({
+          id: item.id,
+          text: item.text,
+          context: item.context,
+        })),
+        settings.grokApiKey,
+        settings.grokModel,
+      );
+
+      saveForUndo('edit-stream', 'AI cleanup');
+
+      const cleanMap = new Map(result.items.map(i => [i.originalId, i.cleanedText]));
+      const dupToPrimary = new Map<string, string>();
+      for (const group of result.duplicateGroups) {
+        for (const dupId of group.duplicateIds) {
+          dupToPrimary.set(dupId, group.primaryId);
+        }
+      }
+
+      let renamed = 0;
+      let removed = 0;
+
+      setState(prev => {
+        const updatedItems = prev.streamItems
+          .map(item => {
+            const cleaned = cleanMap.get(item.id);
+            if (cleaned !== undefined && cleaned !== item.text) {
+              renamed += 1;
+              return { ...item, text: cleaned, duplicateOf: dupToPrimary.get(item.id) ?? null };
+            }
+            return { ...item, duplicateOf: dupToPrimary.get(item.id) ?? null };
+          })
+          .filter(item => {
+            const isDup = dupToPrimary.has(item.id);
+            if (isDup) removed += 1;
+            return !isDup;
+          });
+
+        const newInputText = updatedItems.map(item => item.text).join('\n');
+        setInputText(newInputText);
+
+        return { ...prev, streamItems: updatedItems };
+      });
+
+      const parts: string[] = [];
+      if (renamed > 0) parts.push(`${renamed} cleaned`);
+      if (removed > 0) parts.push(`${removed} duplicate${removed === 1 ? '' : 's'} merged`);
+      setAiMessage(parts.length ? `AI edit: ${parts.join(', ')}` : 'AI edit: no changes needed');
+      setTimeout(() => setAiMessage(null), 4000);
+    } catch (err) {
+      console.error(err);
+      setAiError(err instanceof Error ? err.message : 'AI edit failed');
+      setTimeout(() => setAiError(null), 5000);
+    } finally {
+      setAiEditing(false);
+    }
+  };
+
+  const handleCopyStack = async () => {
+    if (state.stackItems.length === 0) return;
+    try {
+      await copyStackToClipboard(state.stackItems);
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -326,7 +394,6 @@ export default function Home() {
       const actualIndex = processingIndex % unprocessedItems.length;
       const currentItem = unprocessedItems[actualIndex];
       handleMoveToStack(currentItem.id);
-      // Don't increment index since the item was removed
     }
   };
 
@@ -336,7 +403,6 @@ export default function Home() {
       const actualIndex = processingIndex % unprocessedItems.length;
       const currentItem = unprocessedItems[actualIndex];
       handleDeleteStreamItem(currentItem.id);
-      // Don't increment index since the item was removed
     }
   };
 
@@ -349,7 +415,9 @@ export default function Home() {
       <header className="app-header">
         <div className="header-content">
           <div className="header-title">
-            <span className="brain-icon">🧠</span>
+            <span className="brain-icon">
+              <BrainIcon size={36} />
+            </span>
             <div>
               <h1>BrainDump</h1>
               <p>Stream your thoughts, stack your actions</p>
@@ -360,11 +428,24 @@ export default function Home() {
               onClick={handleUndo}
               disabled={!canUndo}
               className="undo-btn icon-btn"
-              title={`Undo${canUndo ? ' (Ctrl/Cmd+Z)' : ''}`}
+              data-tooltip={canUndo ? 'Undo (Ctrl/Cmd+Z)' : 'Nothing to undo'}
+              data-tooltip-position="bottom"
+              aria-label="Undo"
             >
-              ↶
+              <UndoIcon />
+            </button>
+            <button
+              onClick={handleCopyStack}
+              disabled={state.stackItems.length === 0}
+              className="icon-btn"
+              data-tooltip={state.stackItems.length === 0 ? 'Stack is empty' : 'Copy Stack as markdown'}
+              data-tooltip-position="bottom"
+              aria-label="Copy Stack"
+            >
+              <CopyIcon />
             </button>
             <ExportImport state={state} onImport={handleImport} />
+            <Settings />
             <ThemeToggle />
           </div>
         </div>
@@ -387,6 +468,10 @@ export default function Home() {
           onEditItem={handleEditStreamItem}
           onMergeItems={handleMergeItems}
           onStartProcessing={handleStartProcessing}
+          onAIEdit={handleAIEdit}
+          aiEditing={aiEditing}
+          aiMessage={aiMessage}
+          aiError={aiError}
         />
         <StackPane
           items={state.stackItems}

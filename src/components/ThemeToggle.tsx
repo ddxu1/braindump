@@ -1,12 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { MoonIcon, SunIcon } from './Icons';
 
 export default function ThemeToggle() {
   const [isDark, setIsDark] = useState(true);
 
   useEffect(() => {
-    // Load theme from localStorage
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme) {
       setIsDark(savedTheme === 'dark');
@@ -24,8 +24,14 @@ export default function ThemeToggle() {
   };
 
   return (
-    <button className="theme-toggle" onClick={toggleTheme} title={`Switch to ${isDark ? 'light' : 'dark'} mode`}>
-      {isDark ? '☀️' : '🌙'}
+    <button
+      className="icon-btn theme-toggle"
+      onClick={toggleTheme}
+      data-tooltip={`Switch to ${isDark ? 'light' : 'dark'} mode`}
+      data-tooltip-position="bottom"
+      aria-label={`Switch to ${isDark ? 'light' : 'dark'} mode`}
+    >
+      {isDark ? <SunIcon /> : <MoonIcon />}
     </button>
   );
 }

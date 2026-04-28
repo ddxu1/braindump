@@ -1,41 +1,40 @@
 import { AppState, StackItem } from '@/types';
+import { BulletStyle, formatBullet, loadSettings } from './settings';
 
-export const exportToMarkdown = async (stackItems: StackItem[]): Promise<void> => {
-  // Generate markdown content - just the item text as a clean list
-  const lines = stackItems.map(item => `- [ ] ${item.text}`);
-  const markdown = lines.join('\n');
+export const buildMarkdown = (stackItems: StackItem[], style?: BulletStyle): string => {
+  const bulletStyle = style ?? loadSettings().bulletStyle;
+  return stackItems.map(item => formatBullet(item.text, bulletStyle)).join('\n');
+};
 
-  // Copy to clipboard
-  try {
-    await navigator.clipboard.writeText(markdown);
+export const copyStackToClipboard = async (
+  stackItems: StackItem[],
+  style?: BulletStyle,
+): Promise<void> => {
+  const markdown = buildMarkdown(stackItems, style);
+  await navigator.clipboard.writeText(markdown);
 
-    // Show temporary alert
-    const alert = document.createElement('div');
-    alert.textContent = 'Copied to clipboard!';
-    alert.style.cssText = `
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      background: #10b981;
-      color: white;
-      padding: 12px 24px;
-      border-radius: 8px;
-      font-weight: 500;
-      z-index: 9999;
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-      animation: slideIn 0.3s ease-out;
-    `;
+  const alert = document.createElement('div');
+  alert.textContent = 'Copied to clipboard';
+  alert.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #1db954;
+    color: white;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-weight: 500;
+    z-index: 9999;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    animation: slideIn 0.3s ease-out;
+  `;
 
-    document.body.appendChild(alert);
+  document.body.appendChild(alert);
 
-    // Remove after 2 seconds
-    setTimeout(() => {
-      alert.style.animation = 'slideOut 0.3s ease-out';
-      setTimeout(() => document.body.removeChild(alert), 300);
-    }, 2000);
-  } catch (error) {
-    console.error('Failed to copy to clipboard:', error);
-  }
+  setTimeout(() => {
+    alert.style.animation = 'slideOut 0.3s ease-out';
+    setTimeout(() => document.body.removeChild(alert), 300);
+  }, 2000);
 };
 
 export const exportToJSON = (state: AppState): void => {
@@ -65,7 +64,6 @@ export const importFromJSON = (file: File): Promise<AppState> => {
 
         const data = JSON.parse(result) as AppState;
 
-        // Validate the structure
         if (!data.streamItems || !data.stackItems) {
           throw new Error('Invalid backup file structure');
         }

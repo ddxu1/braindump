@@ -18,6 +18,7 @@ import {
 } from '@dnd-kit/sortable';
 import { StackItem } from '@/types';
 import StackItemComponent from './StackItemComponent';
+import { CloseIcon, TrashIcon } from './Icons';
 
 interface StackPaneProps {
   items: StackItem[];
@@ -43,7 +44,6 @@ export default function StackPane({
     })
   );
 
-  // Filter items based on search query
   const filteredItems = useMemo(() => {
     if (!searchQuery.trim()) return items;
 
@@ -68,7 +68,6 @@ export default function StackPane({
       const newIndex = items.findIndex((item) => item.id === over.id);
 
       const reorderedItems = arrayMove(items, oldIndex, newIndex);
-      // Update order property
       const itemsWithNewOrder = reorderedItems.map((item, index) => ({
         ...item,
         order: index,
@@ -83,15 +82,16 @@ export default function StackPane({
         <div className="stack-header-content">
           <div>
             <h2>STACK</h2>
-            <p className="subtitle">Organized Actions</p>
           </div>
-          {items.length > 0 && (
+          {items.length > 1 && (
             <button
               onClick={onClearAll}
-              className="clear-all-btn"
-              title="Clear all items"
+              className="stack-action-btn clear-all-btn"
+              data-tooltip="Clear all items"
+              data-tooltip-position="bottom"
+              aria-label="Clear all items"
             >
-              Clear All
+              <TrashIcon size={18} />
             </button>
           )}
         </div>
@@ -110,9 +110,10 @@ export default function StackPane({
               <button
                 className="search-clear"
                 onClick={() => setSearchQuery('')}
-                title="Clear search"
+                data-tooltip="Clear search"
+                aria-label="Clear search"
               >
-                ×
+                <CloseIcon size={14} />
               </button>
             )}
             {searchQuery && (
@@ -136,7 +137,7 @@ export default function StackPane({
           <div className="stack-items">
             {items.length === 0 ? (
               <div className="empty-state">
-                No items yet. Move items from Stream to get started!
+                No items yet. Move items from Stream to get started.
               </div>
             ) : filteredItems.length === 0 ? (
               <div className="empty-state">

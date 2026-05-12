@@ -794,6 +794,96 @@ body {
   margin-bottom: 1rem;
 }
 
+.processing-deck {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.deck-card {
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+  transition: all 0.2s;
+  position: relative;
+}
+
+.deck-card.empty {
+  visibility: hidden;
+  height: 2.4rem;
+  padding: 0;
+  border: 1px dashed transparent;
+}
+
+.deck-card.past {
+  opacity: 0.45;
+  font-size: 0.85rem;
+}
+
+.deck-card.upcoming {
+  opacity: 0.7;
+  font-size: 0.85rem;
+}
+
+.deck-card.current {
+  background: var(--bg-elevated);
+  border: 2px solid var(--accent);
+  padding: 1.25rem 1.25rem 1rem;
+  box-shadow: 0 4px 18px rgba(29, 185, 84, 0.18);
+}
+
+.deck-card.current .deck-text {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.deck-card .deck-text {
+  color: var(--text-primary);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.deck-meta {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.deck-action-tag {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  margin-right: 0.5rem;
+  vertical-align: middle;
+}
+
+.deck-card.action-stayed .deck-action-tag {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.deck-card.action-deleted .deck-action-tag {
+  background: rgba(226, 33, 52, 0.2);
+  color: var(--danger);
+}
+
+.deck-card.action-moved .deck-action-tag {
+  background: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
+}
+
+.deck-card.action-deleted .deck-text {
+  text-decoration: line-through;
+}
+
 .processing-actions {
   display: flex;
   gap: 1rem;

@@ -23,7 +23,6 @@ export default function Home() {
   });
   const [inputText, setInputText] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [processingIndex, setProcessingIndex] = useState(0);
   const [undoMessage, setUndoMessage] = useState<string | null>(null);
   const [aiEditing, setAiEditing] = useState(false);
   const [aiMessage, setAiMessage] = useState<string | null>(null);
@@ -361,53 +360,23 @@ export default function Home() {
 
   const handleStartProcessing = () => {
     setIsProcessing(true);
-    setProcessingIndex(0);
   };
 
   const handleCloseProcessing = () => {
     setIsProcessing(false);
-    setProcessingIndex(0);
   };
 
   const getUnprocessedItems = () => {
     return state.streamItems.filter(item => !item.processed);
   };
 
-  const handleProcessingKeep = () => {
-    const unprocessedItems = getUnprocessedItems();
-    if (unprocessedItems.length > 0) {
-      const actualIndex = processingIndex % unprocessedItems.length;
-      const currentItem = unprocessedItems[actualIndex];
-      setState(prev => ({
-        ...prev,
-        streamItems: prev.streamItems.map(item =>
-          item.id === currentItem.id ? { ...item, processed: true } : item
-        ),
-      }));
-      setProcessingIndex(prev => prev + 1);
-    }
-  };
-
-  const handleProcessingMoveToStack = () => {
-    const unprocessedItems = getUnprocessedItems();
-    if (unprocessedItems.length > 0) {
-      const actualIndex = processingIndex % unprocessedItems.length;
-      const currentItem = unprocessedItems[actualIndex];
-      handleMoveToStack(currentItem.id);
-    }
-  };
-
-  const handleProcessingDelete = () => {
-    const unprocessedItems = getUnprocessedItems();
-    if (unprocessedItems.length > 0) {
-      const actualIndex = processingIndex % unprocessedItems.length;
-      const currentItem = unprocessedItems[actualIndex];
-      handleDeleteStreamItem(currentItem.id);
-    }
-  };
-
-  const handleProcessingSkip = () => {
-    setProcessingIndex(prev => prev + 1);
+  const handleProcessingStay = (id: string) => {
+    setState(prev => ({
+      ...prev,
+      streamItems: prev.streamItems.map(item =>
+        item.id === id ? { ...item, processed: true } : item
+      ),
+    }));
   };
 
   return (
@@ -485,11 +454,9 @@ export default function Home() {
       {isProcessing && (
         <ProcessingMode
           items={getUnprocessedItems()}
-          currentIndex={processingIndex}
-          onKeep={handleProcessingKeep}
-          onMoveToStack={handleProcessingMoveToStack}
-          onDelete={handleProcessingDelete}
-          onSkip={handleProcessingSkip}
+          onKeep={handleProcessingStay}
+          onMoveToStack={handleMoveToStack}
+          onDelete={handleDeleteStreamItem}
           onClose={handleCloseProcessing}
         />
       )}

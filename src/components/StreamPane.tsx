@@ -45,7 +45,8 @@ export default function StreamPane({
 
   useEffect(() => {
     if (inputText) {
-      setLastSaved(new Date());
+      const frame = requestAnimationFrame(() => setLastSaved(new Date()));
+      return () => cancelAnimationFrame(frame);
     }
   }, [inputText]);
 

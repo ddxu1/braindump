@@ -1,43 +1,73 @@
 'use client';
 
 import { StreamItem } from '@/types';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+
+type Action = 'stayed' | 'deleted' | 'moved';
 
 interface ProcessingModeProps {
   items: StreamItem[];
-  currentIndex: number;
-  onKeep: () => void;
-  onMoveToStack: () => void;
-  onDelete: () => void;
-  onSkip: () => void;
+  onKeep: (id: string) => void;
+  onMoveToStack: (id: string) => void;
+  onDelete: (id: string) => void;
   onClose: () => void;
 }
 
 export default function ProcessingMode({
   items,
-  currentIndex,
   onKeep,
   onMoveToStack,
   onDelete,
-  onSkip,
   onClose,
 }: ProcessingModeProps) {
-  // Keyboard shortcuts: A=keep, S=delete, D=move, W=skip
+  const [queue] = useState<StreamItem[]>(() => items);
+  const [actions, setActions] = useState<Record<string, Action>>({});
+  const [index, setIndex] = useState(0);
+  const [openedAt] = useState(() => Date.now());
+
+  const current = queue[index];
+  const isComplete = !current;
+
+  const handleStay = () => {
+    if (!current) return;
+    setActions(a => ({ ...a, [current.id]: 'stayed' }));
+    onKeep(current.id);
+    setIndex(i => i + 1);
+  };
+
+  const handleDelete = () => {
+    if (!current) return;
+    setActions(a => ({ ...a, [current.id]: 'deleted' }));
+    onDelete(current.id);
+    setIndex(i => i + 1);
+  };
+
+  const handleMove = () => {
+    if (!current) return;
+    setActions(a => ({ ...a, [current.id]: 'moved' }));
+    onMoveToStack(current.id);
+    setIndex(i => i + 1);
+  };
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isComplete) {
+        if (e.key === 'Escape' || e.key === 'Enter') {
+          e.preventDefault();
+          onClose();
+        }
+        return;
+      }
       const k = e.key.toLowerCase();
-      if (k === 'a') {
+      if (k === 'w') {
         e.preventDefault();
-        onKeep();
-      } else if (k === 'd') {
-        e.preventDefault();
-        onMoveToStack();
+        handleDelete();
       } else if (k === 's') {
         e.preventDefault();
-        onDelete();
-      } else if (k === 'w') {
+        handleStay();
+      } else if (k === 'd') {
         e.preventDefault();
-        onSkip();
+        handleMove();
       } else if (e.key === 'Escape') {
         e.preventDefault();
         onClose();
@@ -46,19 +76,25 @@ export default function ProcessingMode({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onKeep, onMoveToStack, onDelete, onSkip, onClose]);
+  });
 
-  if (items.length === 0) {
+  if (isComplete) {
     return (
       <div className="processing-mode">
         <div className="processing-modal">
           <div className="processing-header">
-            <h3>Processing Complete!</h3>
-            <button onClick={onClose} className="close-processing">×</button>
+            <h3>Processing Complete</h3>
+            <button
+              onClick={onClose}
+              className="close-processing"
+              data-tooltip="Close (Esc)"
+              data-tooltip-position="left"
+              aria-label="Close"
+            >×</button>
           </div>
           <div className="processing-item">
             <div className="processing-item-text">
-              All items have been processed.
+              All {queue.length} item{queue.length === 1 ? '' : 's'} have been processed.
             </div>
           </div>
           <div className="processing-actions">
@@ -71,10 +107,32 @@ export default function ProcessingMode({
     );
   }
 
-  // Cycle through items indefinitely
-  const actualIndex = currentIndex % items.length;
-  const currentItem = items[actualIndex];
-  const itemAge = Math.floor((Date.now() - currentItem.createdAt) / (1000 * 60 * 60)); // hours
+  const prev2 = queue[index - 2] ?? null;
+  const prev1 = queue[index - 1] ?? null;
+  const next1 = queue[index + 1] ?? null;
+  const next2 = queue[index + 2] ?? null;
+
+  const renderPast = (item: StreamItem | null, key: string) => {
+    if (!item) return <div key={key} className="deck-card empty" aria-hidden />;
+    const action = actions[item.id];
+    return (
+      <div key={item.id} className={`deck-card past action-${action ?? 'stayed'}`}>
+        {action && <span className="deck-action-tag">{action}</span>}
+        <div className="deck-text">{item.text}</div>
+      </div>
+    );
+  };
+
+  const renderUpcoming = (item: StreamItem | null, key: string) => {
+    if (!item) return <div key={key} className="deck-card empty" aria-hidden />;
+    return (
+      <div key={item.id} className="deck-card upcoming">
+        <div className="deck-text">{item.text}</div>
+      </div>
+    );
+  };
+
+  const itemAge = Math.floor((openedAt - current.createdAt) / (1000 * 60 * 60));
 
   return (
     <div className="processing-mode">
@@ -82,7 +140,7 @@ export default function ProcessingMode({
         <div className="processing-header">
           <h3>Process Stream</h3>
           <div className="processing-progress">
-            Item {actualIndex + 1} of {items.length}
+            Item {index + 1} of {queue.length}
           </div>
           <button
             onClick={onClose}
@@ -93,32 +151,34 @@ export default function ProcessingMode({
           >×</button>
         </div>
 
-        <div className="processing-item">
-          <div className="processing-item-text">
-            {currentItem.text}
+        <div className="processing-deck">
+          {renderPast(prev2, 'p2')}
+          {renderPast(prev1, 'p1')}
+
+          <div className="deck-card current">
+            <div className="deck-text">{current.text}</div>
+            <div className="deck-meta">
+              {itemAge < 1 ? 'just created' : `${itemAge}h old`}
+              {current.context && ` • ${current.context}`}
+            </div>
           </div>
-          <div className="processing-item-meta">
-            Created {itemAge < 1 ? 'less than an hour ago' : `${itemAge} hours ago`}
-            {currentItem.context && ` • Context: ${currentItem.context}`}
-          </div>
+
+          {renderUpcoming(next1, 'n1')}
+          {renderUpcoming(next2, 'n2')}
         </div>
 
         <div className="processing-actions">
-          <button onClick={onKeep} className="processing-btn keep">
-            <span className="shortcut">A</span>
-            Keep in Stream
-          </button>
-          <button onClick={onDelete} className="processing-btn delete">
-            <span className="shortcut">S</span>
+          <button onClick={handleDelete} className="processing-btn delete">
+            <span className="shortcut">W</span>
             Delete
           </button>
-          <button onClick={onMoveToStack} className="processing-btn move">
+          <button onClick={handleStay} className="processing-btn keep">
+            <span className="shortcut">S</span>
+            Stay
+          </button>
+          <button onClick={handleMove} className="processing-btn move">
             <span className="shortcut">D</span>
             Move to Stack
-          </button>
-          <button onClick={onSkip} className="processing-btn skip">
-            <span className="shortcut">W</span>
-            Skip
           </button>
         </div>
       </div>

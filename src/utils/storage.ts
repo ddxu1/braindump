@@ -1,6 +1,17 @@
-import { AppState, StreamItem, StackItem } from '@/types';
+import { AppState, StackItem } from '@/types';
 
 const STORAGE_KEY = 'braindump-app-state';
+
+type LegacyStackItem = StackItem & {
+  isUrgent?: boolean;
+  isImportant?: boolean;
+};
+
+type StoredAppState = Omit<Partial<AppState>, 'stackItems'> & {
+  archivedItems?: unknown;
+  collapsedSections?: unknown;
+  stackItems?: LegacyStackItem[];
+};
 
 export const loadState = (): AppState => {
   if (typeof window === 'undefined') {
@@ -12,7 +23,7 @@ export const loadState = (): AppState => {
     if (serialized === null) {
       return { streamItems: [], stackItems: [] };
     }
-    const data = JSON.parse(serialized);
+    const data = JSON.parse(serialized) as StoredAppState;
 
     // Remove old fields for backwards compatibility
     if (data.archivedItems) {
@@ -24,13 +35,18 @@ export const loadState = (): AppState => {
 
     // Remove isUrgent and isImportant from stack items
     if (data.stackItems) {
-      data.stackItems = data.stackItems.map((item: any) => {
-        const { isUrgent, isImportant, ...rest } = item;
-        return rest;
+      data.stackItems = data.stackItems.map((item) => {
+        const sanitized = { ...item };
+        delete sanitized.isUrgent;
+        delete sanitized.isImportant;
+        return sanitized;
       });
     }
 
-    return data;
+    return {
+      streamItems: data.streamItems ?? [],
+      stackItems: data.stackItems ?? [],
+    };
   } catch (err) {
     console.error('Failed to load state:', err);
     return { streamItems: [], stackItems: [] };

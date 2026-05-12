@@ -29,6 +29,7 @@ export default function StreamItemComponent({
   const [contextText, setContextText] = useState(item.context || '');
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(item.text);
+  const [renderedAt] = useState(() => Date.now());
 
   const handleContextSubmit = () => {
     onAddContext(contextText);
@@ -42,7 +43,7 @@ export default function StreamItemComponent({
     setIsEditing(false);
   };
 
-  const isOld = Date.now() - item.createdAt > 24 * 60 * 60 * 1000;
+  const isOld = renderedAt - item.createdAt > 24 * 60 * 60 * 1000;
 
   return (
     <div className={`stream-item ${isDuplicate ? 'duplicate' : ''}`}>

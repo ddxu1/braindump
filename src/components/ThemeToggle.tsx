@@ -9,8 +9,9 @@ export default function ThemeToggle() {
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme) {
-      setIsDark(savedTheme === 'dark');
+      const frame = requestAnimationFrame(() => setIsDark(savedTheme === 'dark'));
       document.documentElement.setAttribute('data-theme', savedTheme);
+      return () => cancelAnimationFrame(frame);
     } else {
       document.documentElement.setAttribute('data-theme', 'dark');
     }

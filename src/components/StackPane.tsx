@@ -16,26 +16,47 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { StackItem } from '@/types';
+import { Output, StackItem } from '@/types';
 import StackItemComponent from './StackItemComponent';
-import { CloseIcon, TrashIcon } from './Icons';
+import { CloseIcon, PlusIcon, TrashIcon } from './Icons';
 
 interface StackPaneProps {
-  items: StackItem[];
+  outputs: Output[];
+  activeOutputId: string;
+  onSelectOutput: (id: string) => void;
+  onCreateOutput: () => void;
+  onCreateEisenhower: () => void;
+  onCreateCategories: () => void;
   onDeleteItem: (id: string) => void;
   onEditItem: (id: string, text: string) => void;
   onClearAll: () => void;
   onReorder: (items: StackItem[]) => void;
+  onAddToTodoist?: () => void;
+  todoistEnabled: boolean;
+  todoistBusy: boolean;
 }
 
 export default function StackPane({
-  items,
+  outputs,
+  activeOutputId,
+  onSelectOutput,
+  onCreateOutput,
+  onCreateEisenhower,
+  onCreateCategories,
   onDeleteItem,
   onEditItem,
   onClearAll,
   onReorder,
+  onAddToTodoist,
+  todoistEnabled,
+  todoistBusy,
 }: StackPaneProps) {
   const [searchQuery, setSearchQuery] = useState('');
+  const activeOutput = useMemo(
+    () => outputs.find(output => output.id === activeOutputId) ?? outputs[0],
+    [outputs, activeOutputId]
+  );
+  const items = useMemo(() => activeOutput?.items ?? [], [activeOutput]);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -78,22 +99,57 @@ export default function StackPane({
 
   return (
     <div className="stack-pane">
-      <div className="stack-header">
-        <div className="stack-header-content">
-          <div>
-            <h2>STACK</h2>
-          </div>
-          {items.length > 1 && (
+      <div className="stack-header pane-header">
+        <div className="output-switcher">
+          {outputs.map(output => (
             <button
-              onClick={onClearAll}
-              className="stack-action-btn clear-all-btn"
-              data-tooltip="Clear all items"
-              data-tooltip-position="bottom"
-              aria-label="Clear all items"
+              key={output.id}
+              className={`output-tab ${output.id === activeOutputId ? 'active' : ''}`}
+              onClick={() => onSelectOutput(output.id)}
             >
-              <TrashIcon size={18} />
+              <span>{output.name}</span>
+              <strong>{output.items.length}</strong>
             </button>
-          )}
+          ))}
+          <button className="output-tab add-output-tab" onClick={onCreateOutput} data-tooltip="New custom output">
+            <PlusIcon size={14} />
+          </button>
+        </div>
+
+        <div className="stack-header-content">
+          <div className="pane-title-block">
+            <div className="pane-title-row">
+              <h2>Output</h2>
+              <span className="count-pill">{items.length}</span>
+            </div>
+            <div className="pane-meta-row">
+              <span>{filteredItems.length} visible</span>
+            </div>
+          </div>
+          <div className="output-actions">
+            <button className="preset-btn" onClick={onCreateEisenhower}>Eisenhower</button>
+            <button className="preset-btn" onClick={onCreateCategories}>Categories</button>
+            {todoistEnabled && (
+              <button
+                className="preset-btn todoist-btn"
+                onClick={onAddToTodoist}
+                disabled={todoistBusy || items.length === 0}
+              >
+                {todoistBusy ? 'Sending...' : 'Todoist'}
+              </button>
+            )}
+            {items.length > 1 && (
+              <button
+                onClick={onClearAll}
+                className="stack-action-btn clear-all-btn"
+                data-tooltip="Clear active output"
+                data-tooltip-position="bottom"
+                aria-label="Clear active output"
+              >
+                <TrashIcon size={18} />
+              </button>
+            )}
+          </div>
         </div>
 
         {items.length > 0 && (
@@ -101,7 +157,7 @@ export default function StackPane({
             <input
               type="text"
               className="search-input"
-              placeholder="Search stack..."
+              placeholder="Search output..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={handleSearchKeyDown}
@@ -137,11 +193,11 @@ export default function StackPane({
           <div className="stack-items">
             {items.length === 0 ? (
               <div className="empty-state">
-                No items yet. Move items from Stream to get started.
+                No output yet. Move items from Input to get started.
               </div>
             ) : filteredItems.length === 0 ? (
               <div className="empty-state">
-                No items match your search.
+                No output items match your search.
               </div>
             ) : (
               filteredItems.map((item) => (

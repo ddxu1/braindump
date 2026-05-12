@@ -1,5 +1,6 @@
 import { AppState, StackItem } from '@/types';
 import { BulletStyle, formatBullet, loadSettings } from './settings';
+import { normalizeState } from './storage';
 
 export const buildMarkdown = (stackItems: StackItem[], style?: BulletStyle): string => {
   const bulletStyle = style ?? loadSettings().bulletStyle;
@@ -62,9 +63,9 @@ export const importFromJSON = (file: File): Promise<AppState> => {
           throw new Error('Invalid file content');
         }
 
-        const data = JSON.parse(result) as AppState;
+        const data = normalizeState(JSON.parse(result));
 
-        if (!data.streamItems || !data.stackItems) {
+        if (!data.streamItems || !data.outputs) {
           throw new Error('Invalid backup file structure');
         }
 

@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { StreamItem, StackItem, AppState } from '@/types';
-import { loadState, saveState, generateId } from '@/utils/storage';
-import { loadSettings } from '@/utils/settings';
-import { cleanupWithGrok } from '@/utils/grok';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { AppSettings, DEFAULT_SETTINGS, loadSettings } from '@/utils/settings';
+import { StreamItem, StackItem, AppState, Output } from '@/types';
+import { loadState, saveState, generateId, normalizeState } from '@/utils/storage';
+import { findDuplicates, findInputMatches } from '@/utils/duplicateDetection';
 import { copyStackToClipboard } from '@/utils/exportImport';
+import { addTasksToTodoist } from '@/utils/todoist';
 import { UndoManager, HistoryAction } from '@/utils/undo';
 import StreamPane from '@/components/StreamPane';
 import StackPane from '@/components/StackPane';
@@ -16,32 +17,52 @@ import Settings from '@/components/Settings';
 import { BrainIcon, CopyIcon, UndoIcon } from '@/components/Icons';
 import './styles.css';
 
+const EISENHOWER_OUTPUTS = ['Do now', 'Schedule', 'Delegate', 'Later'];
+
 export default function Home() {
-  const [state, setState] = useState<AppState>({
-    streamItems: [],
-    stackItems: [],
-  });
+  const [state, setState] = useState<AppState>(() => normalizeState({}));
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [isHydrated, setIsHydrated] = useState(false);
   const [inputText, setInputText] = useState('');
+  const [additionText, setAdditionText] = useState('');
+  const [selectedInputIds, setSelectedInputIds] = useState<Set<string>>(new Set());
   const [isProcessing, setIsProcessing] = useState(false);
   const [undoMessage, setUndoMessage] = useState<string | null>(null);
-  const [aiEditing, setAiEditing] = useState(false);
-  const [aiMessage, setAiMessage] = useState<string | null>(null);
-  const [aiError, setAiError] = useState<string | null>(null);
+  const [canUndo, setCanUndo] = useState(false);
+  const [todoistBusy, setTodoistBusy] = useState(false);
   const undoManager = useRef(new UndoManager());
-  const canUndo = undoManager.current.canUndo();
+
+  const activeOutput = useMemo(
+    () => state.outputs.find(output => output.id === state.activeOutputId) ?? state.outputs[0],
+    [state.outputs, state.activeOutputId]
+  );
+
+  const inputMatches = useMemo(
+    () => findInputMatches(state.streamItems, state.outputs),
+    [state.streamItems, state.outputs]
+  );
 
   useEffect(() => {
-    const loadedState = loadState();
-    setState(loadedState);
+    const frameId = window.requestAnimationFrame(() => {
+      const loadedState = loadState();
+      setState(loadedState);
+      setSettings(loadSettings());
+      setInputText(loadedState.streamItems.map(item => item.text).join('\n'));
+      setIsHydrated(true);
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
   }, []);
 
   useEffect(() => {
+    if (!isHydrated) return;
+
     const timeoutId = setTimeout(() => {
       saveState(state);
     }, 500);
 
     return () => clearTimeout(timeoutId);
-  }, [state]);
+  }, [state, isHydrated]);
 
   const saveForUndo = (type: HistoryAction['type'], description: string) => {
     undoManager.current.push({
@@ -50,18 +71,19 @@ export default function Home() {
       previousState: { ...state },
       timestamp: Date.now(),
     });
+    setCanUndo(true);
   };
 
   const handleUndo = () => {
     const action = undoManager.current.pop();
-    if (action) {
-      setState(action.previousState);
-      setUndoMessage(`Undid: ${action.description}`);
-      setTimeout(() => setUndoMessage(null), 3000);
+    if (!action) return;
 
-      const newInputText = action.previousState.streamItems.map(item => item.text).join('\n');
-      setInputText(newInputText);
-    }
+    setState(action.previousState);
+    setUndoMessage(`Undid: ${action.description}`);
+    setTimeout(() => setUndoMessage(null), 3000);
+    setInputText(action.previousState.streamItems.map(item => item.text).join('\n'));
+    setSelectedInputIds(new Set());
+    setCanUndo(undoManager.current.canUndo());
   };
 
   useEffect(() => {
@@ -77,7 +99,7 @@ export default function Home() {
         e.preventDefault();
         const unprocessedCount = state.streamItems.filter(item => !item.processed).length;
         if (unprocessedCount > 0 && !isProcessing) {
-          handleStartProcessing();
+          setIsProcessing(true);
         }
       }
     };
@@ -86,41 +108,61 @@ export default function Home() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [state.streamItems, isProcessing]);
 
-  const syncInputToItems = useCallback((text: string) => {
-    const lines = text.split('\n').filter(line => line.trim() !== '');
-    const existingTexts = state.streamItems.map(item => item.text);
+  const addInputBatch = useCallback((text: string, source: 'initial' | 'addition' | 'import') => {
+    const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
+    if (lines.length === 0) return;
 
-    const newItems: StreamItem[] = [];
-    lines.forEach(line => {
-      if (!existingTexts.includes(line)) {
-        newItems.push({
-          id: generateId(),
-          text: line,
-          createdAt: Date.now(),
-          processed: false,
-          context: null,
-          duplicateOf: null,
-        });
-      }
-    });
-
-    if (newItems.length > 0) {
-      setState(prev => ({
-        ...prev,
-        streamItems: [...prev.streamItems, ...newItems],
+    const existingTexts = new Set(state.streamItems.map(item => item.text));
+    const newItems: StreamItem[] = lines
+      .filter(line => !existingTexts.has(line))
+      .map(line => ({
+        id: generateId(),
+        text: line,
+        createdAt: Date.now(),
+        processed: false,
+        context: null,
+        duplicateOf: null,
       }));
-    }
+
+    if (newItems.length === 0) return;
+
+    setState(prev => ({
+      ...prev,
+      streamItems: [...prev.streamItems, ...newItems],
+      inputBatches: [
+        ...prev.inputBatches,
+        {
+          id: generateId(),
+          text,
+          createdAt: Date.now(),
+          itemIds: newItems.map(item => item.id),
+          source,
+        },
+      ],
+    }));
   }, [state.streamItems]);
 
-  const handleInputChange = (text: string) => {
-    setInputText(text);
-  };
-
   const handleInputBlur = () => {
-    syncInputToItems(inputText);
+    addInputBatch(inputText, state.inputBatches.length === 0 ? 'initial' : 'addition');
   };
 
-  const handleDeleteStreamItem = (id: string) => {
+  const handleAddInputBatch = () => {
+    addInputBatch(additionText, 'addition');
+    setAdditionText('');
+  };
+
+  const updateActiveOutput = (updater: (items: StackItem[]) => StackItem[]) => {
+    setState(prev => ({
+      ...prev,
+      outputs: prev.outputs.map(output =>
+        output.id === prev.activeOutputId
+          ? { ...output, items: updater(output.items) }
+          : output
+      ),
+    }));
+  };
+
+  const handleDeleteInputItem = (id: string) => {
     const itemToDelete = state.streamItems.find(item => item.id === id);
     if (itemToDelete) {
       saveForUndo('delete-stream', `Delete "${itemToDelete.text.substring(0, 30)}..."`);
@@ -130,252 +172,208 @@ export default function Home() {
       ...prev,
       streamItems: prev.streamItems.filter(item => item.id !== id),
     }));
+    setSelectedInputIds(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
 
     if (itemToDelete) {
-      const newText = inputText
-        .split('\n')
-        .filter(line => line !== itemToDelete.text)
-        .join('\n');
-      setInputText(newText);
+      setInputText(inputText.split('\n').filter(line => line !== itemToDelete.text).join('\n'));
     }
   };
 
-  const handleMoveToStack = (id: string) => {
-    const streamItem = state.streamItems.find(item => item.id === id);
-    if (!streamItem) return;
+  const handleClearInput = () => {
+    if (state.streamItems.length === 0 && inputText.trim() === '') return;
 
-    saveForUndo('move-to-stack', `Move "${streamItem.text.substring(0, 30)}..." to Stack`);
+    const confirmed = window.confirm(`Clear all ${state.streamItems.length} items from Input?`);
+    if (!confirmed) return;
 
-    const stackItem: StackItem = {
+    saveForUndo('clear-stream', `Clear all ${state.streamItems.length} items from Input`);
+    setState(prev => ({ ...prev, streamItems: [] }));
+    setInputText('');
+    setSelectedInputIds(new Set());
+    setIsProcessing(false);
+  };
+
+  const moveInputItemsToOutput = (ids: Set<string>) => {
+    const movingItems = state.streamItems.filter(item => ids.has(item.id));
+    if (!activeOutput || movingItems.length === 0) return;
+
+    saveForUndo('move-to-stack', `Move ${movingItems.length} item${movingItems.length === 1 ? '' : 's'} to ${activeOutput.name}`);
+
+    const outputItems: StackItem[] = movingItems.map((streamItem, index) => ({
       id: generateId(),
       text: streamItem.text,
       context: streamItem.context,
-      category: null,
+      category: activeOutput.preset === 'category' ? activeOutput.name : null,
       priority: null,
       dueDate: null,
-      order: state.stackItems.length,
-    };
+      order: activeOutput.items.length + index,
+    }));
 
     setState(prev => ({
       ...prev,
-      streamItems: prev.streamItems.filter(item => item.id !== id),
-      stackItems: [...prev.stackItems, stackItem],
+      streamItems: prev.streamItems.filter(item => !ids.has(item.id)),
+      outputs: prev.outputs.map(output =>
+        output.id === prev.activeOutputId
+          ? { ...output, items: [...output.items, ...outputItems] }
+          : output
+      ),
     }));
-
-    const newText = inputText
-      .split('\n')
-      .filter(line => line !== streamItem.text)
-      .join('\n');
-    setInputText(newText);
+    setInputText(prev => prev.split('\n').filter(line => !movingItems.some(item => item.text === line)).join('\n'));
+    setSelectedInputIds(new Set());
   };
+
+  const handleMoveToOutput = (id: string) => moveInputItemsToOutput(new Set([id]));
+  const handleMoveSelectedToOutput = () => moveInputItemsToOutput(selectedInputIds);
 
   const handleAddContext = (id: string, context: string) => {
     setState(prev => ({
       ...prev,
-      streamItems: prev.streamItems.map(item =>
-        item.id === id ? { ...item, context } : item
-      ),
+      streamItems: prev.streamItems.map(item => item.id === id ? { ...item, context } : item),
     }));
   };
 
-  const handleEditStreamItem = (id: string, text: string) => {
+  const handleEditInputItem = (id: string, text: string) => {
     setState(prev => ({
       ...prev,
-      streamItems: prev.streamItems.map(item =>
-        item.id === id ? { ...item, text } : item
-      ),
+      streamItems: prev.streamItems.map(item => item.id === id ? { ...item, text } : item),
     }));
-
-    const updatedItems = state.streamItems.map(item =>
-      item.id === id ? { ...item, text } : item
-    );
-    const newInputText = updatedItems.map(item => item.text).join('\n');
-    setInputText(newInputText);
+    const updatedItems = state.streamItems.map(item => item.id === id ? { ...item, text } : item);
+    setInputText(updatedItems.map(item => item.text).join('\n'));
   };
 
-  const handleEditStackItem = (id: string, text: string) => {
-    setState(prev => ({
-      ...prev,
-      stackItems: prev.stackItems.map(item =>
-        item.id === id ? { ...item, text } : item
-      ),
-    }));
+  const handleEditOutputItem = (id: string, text: string) => {
+    updateActiveOutput(items => items.map(item => item.id === id ? { ...item, text } : item));
   };
 
-  const handleDeleteStackItem = (id: string) => {
-    const itemToDelete = state.stackItems.find(item => item.id === id);
+  const handleDeleteOutputItem = (id: string) => {
+    const itemToDelete = activeOutput?.items.find(item => item.id === id);
     if (itemToDelete) {
       saveForUndo('delete-stack', `Delete "${itemToDelete.text.substring(0, 30)}..."`);
     }
-
-    setState(prev => ({
-      ...prev,
-      stackItems: prev.stackItems.filter(item => item.id !== id),
-    }));
+    updateActiveOutput(items => items.filter(item => item.id !== id));
   };
 
-  const handleClearAllStack = () => {
-    if (state.stackItems.length === 0) return;
-
-    const confirmed = window.confirm(`Are you sure you want to clear all ${state.stackItems.length} items from the Stack?`);
-    if (confirmed) {
-      saveForUndo('clear-all', `Clear all ${state.stackItems.length} items from Stack`);
-      setState(prev => ({
-        ...prev,
-        stackItems: [],
-      }));
-    }
+  const handleClearActiveOutput = () => {
+    if (!activeOutput || activeOutput.items.length === 0) return;
+    const confirmed = window.confirm(`Clear all ${activeOutput.items.length} items from ${activeOutput.name}?`);
+    if (!confirmed) return;
+    saveForUndo('clear-all', `Clear ${activeOutput.name}`);
+    updateActiveOutput(() => []);
   };
 
-  const handleReorderStack = (reorderedItems: StackItem[]) => {
-    saveForUndo('reorder', 'Reorder Stack items');
-    setState(prev => ({
-      ...prev,
-      stackItems: reorderedItems,
-    }));
+  const handleReorderOutput = (reorderedItems: StackItem[]) => {
+    saveForUndo('reorder', `Reorder ${activeOutput?.name ?? 'Output'} items`);
+    updateActiveOutput(() => reorderedItems);
   };
 
   const handleImport = (importedState: AppState) => {
-    setState(importedState);
-    saveState(importedState);
-
-    const newInputText = importedState.streamItems.map(item => item.text).join('\n');
-    setInputText(newInputText);
+    const normalized = normalizeState(importedState);
+    setState(normalized);
+    saveState(normalized);
+    setInputText(normalized.streamItems.map(item => item.text).join('\n'));
+    setSelectedInputIds(new Set());
   };
 
-  const handleMergeItems = (duplicateId: string, originalId: string) => {
-    setState(prev => {
-      const duplicateItem = prev.streamItems.find(item => item.id === duplicateId);
-      const originalItem = prev.streamItems.find(item => item.id === originalId);
+  const handleMergeInputItems = (duplicateId: string, originalId: string) => {
+    const duplicateItem = state.streamItems.find(item => item.id === duplicateId);
+    const originalItem = state.streamItems.find(item => item.id === originalId);
+    if (!duplicateItem || !originalItem) return;
 
-      if (!duplicateItem || !originalItem) return prev;
+    saveForUndo('merge-duplicates', `Merge duplicate input`);
+    const mergedContext = duplicateItem.context
+      ? (originalItem.context ? `${originalItem.context}; ${duplicateItem.context}` : duplicateItem.context)
+      : originalItem.context;
 
-      const mergedContext = duplicateItem.context
-        ? (originalItem.context ? `${originalItem.context}; ${duplicateItem.context}` : duplicateItem.context)
-        : originalItem.context;
-
-      return {
-        ...prev,
-        streamItems: prev.streamItems
-          .filter(item => item.id !== duplicateId)
-          .map(item =>
-            item.id === originalId
-              ? { ...item, context: mergedContext }
-              : item
-          ),
-      };
-    });
-
-    const itemToDelete = state.streamItems.find(item => item.id === duplicateId);
-    if (itemToDelete) {
-      const newText = inputText
-        .split('\n')
-        .filter(line => line !== itemToDelete.text)
-        .join('\n');
-      setInputText(newText);
-    }
+    setState(prev => ({
+      ...prev,
+      streamItems: prev.streamItems
+        .filter(item => item.id !== duplicateId)
+        .map(item => item.id === originalId ? { ...item, context: mergedContext } : item),
+    }));
+    setInputText(prev => prev.split('\n').filter(line => line !== duplicateItem.text).join('\n'));
   };
 
-  const handleAIEdit = async () => {
-    setAiError(null);
-    setAiMessage(null);
+  const handleMergeAllInputDuplicates = () => {
+    const duplicateMap = findDuplicates(state.streamItems);
+    if (duplicateMap.size === 0) return;
 
-    const settings = loadSettings();
-    if (!settings.grokApiKey) {
-      setAiError('Add your Grok API key in Settings first.');
-      setTimeout(() => setAiError(null), 4000);
-      return;
-    }
-    if (state.streamItems.length === 0) return;
+    const duplicateIds = new Set(duplicateMap.keys());
+    saveForUndo('merge-duplicates', `Merge ${duplicateMap.size} input duplicate${duplicateMap.size === 1 ? '' : 's'}`);
+    setState(prev => ({
+      ...prev,
+      streamItems: prev.streamItems.filter(item => !duplicateIds.has(item.id)),
+    }));
+    setInputText(prev => prev.split('\n').filter(line => !state.streamItems.some(item => duplicateIds.has(item.id) && item.text === line)).join('\n'));
+  };
 
-    setAiEditing(true);
+  const createOutput = (name: string, preset: Output['preset'] = 'custom') => ({
+    id: generateId(),
+    name,
+    preset,
+    items: [],
+  });
+
+  const handleCreateOutput = () => {
+    const name = window.prompt('Output name');
+    if (!name?.trim()) return;
+    const output = createOutput(name.trim());
+    setState(prev => ({
+      ...prev,
+      outputs: [...prev.outputs, output],
+      activeOutputId: output.id,
+    }));
+  };
+
+  const handleCreateEisenhower = () => {
+    const newOutputs = EISENHOWER_OUTPUTS.map(name => createOutput(name, 'eisenhower'));
+    setState(prev => ({
+      ...prev,
+      outputs: [...prev.outputs, ...newOutputs],
+      activeOutputId: newOutputs[0].id,
+    }));
+  };
+
+  const handleCreateCategories = () => {
+    const raw = window.prompt('Categories, comma-separated');
+    const names = raw?.split(',').map(name => name.trim()).filter(Boolean) ?? [];
+    if (names.length === 0) return;
+    const newOutputs = names.map(name => createOutput(name, 'category'));
+    setState(prev => ({
+      ...prev,
+      outputs: [...prev.outputs, ...newOutputs],
+      activeOutputId: newOutputs[0].id,
+    }));
+  };
+
+  const handleCopyOutput = async () => {
+    if (!activeOutput || activeOutput.items.length === 0) return;
+    await copyStackToClipboard(activeOutput.items);
+  };
+
+  const handleAddToTodoist = async () => {
+    if (!activeOutput || activeOutput.items.length === 0) return;
+    setTodoistBusy(true);
     try {
-      const result = await cleanupWithGrok(
-        state.streamItems.map(item => ({
-          id: item.id,
-          text: item.text,
-          context: item.context,
-        })),
-        settings.grokApiKey,
-        settings.grokModel,
-      );
-
-      saveForUndo('edit-stream', 'AI cleanup');
-
-      const cleanMap = new Map(result.items.map(i => [i.originalId, i.cleanedText]));
-      const dupToPrimary = new Map<string, string>();
-      for (const group of result.duplicateGroups) {
-        for (const dupId of group.duplicateIds) {
-          dupToPrimary.set(dupId, group.primaryId);
-        }
-      }
-
-      let renamed = 0;
-      let removed = 0;
-
-      setState(prev => {
-        const updatedItems = prev.streamItems
-          .map(item => {
-            const cleaned = cleanMap.get(item.id);
-            if (cleaned !== undefined && cleaned !== item.text) {
-              renamed += 1;
-              return { ...item, text: cleaned, duplicateOf: dupToPrimary.get(item.id) ?? null };
-            }
-            return { ...item, duplicateOf: dupToPrimary.get(item.id) ?? null };
-          })
-          .filter(item => {
-            const isDup = dupToPrimary.has(item.id);
-            if (isDup) removed += 1;
-            return !isDup;
-          });
-
-        const newInputText = updatedItems.map(item => item.text).join('\n');
-        setInputText(newInputText);
-
-        return { ...prev, streamItems: updatedItems };
-      });
-
-      const parts: string[] = [];
-      if (renamed > 0) parts.push(`${renamed} cleaned`);
-      if (removed > 0) parts.push(`${removed} duplicate${removed === 1 ? '' : 's'} merged`);
-      setAiMessage(parts.length ? `AI edit: ${parts.join(', ')}` : 'AI edit: no changes needed');
-      setTimeout(() => setAiMessage(null), 4000);
+      await addTasksToTodoist(activeOutput.items, settings.todoistApiKey);
+      setUndoMessage(`Added ${activeOutput.items.length} item${activeOutput.items.length === 1 ? '' : 's'} to Todoist`);
+      setTimeout(() => setUndoMessage(null), 3000);
     } catch (err) {
-      console.error(err);
-      setAiError(err instanceof Error ? err.message : 'AI edit failed');
-      setTimeout(() => setAiError(null), 5000);
+      setUndoMessage(err instanceof Error ? err.message : 'Todoist sync failed');
+      setTimeout(() => setUndoMessage(null), 5000);
     } finally {
-      setAiEditing(false);
+      setTodoistBusy(false);
     }
   };
 
-  const handleCopyStack = async () => {
-    if (state.stackItems.length === 0) return;
-    try {
-      await copyStackToClipboard(state.stackItems);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleStartProcessing = () => {
-    setIsProcessing(true);
-  };
-
-  const handleCloseProcessing = () => {
-    setIsProcessing(false);
-  };
-
-  const getUnprocessedItems = () => {
-    return state.streamItems.filter(item => !item.processed);
-  };
+  const getUnprocessedItems = () => state.streamItems.filter(item => !item.processed);
 
   const handleProcessingStay = (id: string) => {
     setState(prev => ({
       ...prev,
-      streamItems: prev.streamItems.map(item =>
-        item.id === id ? { ...item, processed: true } : item
-      ),
+      streamItems: prev.streamItems.map(item => item.id === id ? { ...item, processed: true } : item),
     }));
   };
 
@@ -389,7 +387,7 @@ export default function Home() {
             </span>
             <div>
               <h1>BrainDump</h1>
-              <p>Stream your thoughts, stack your actions</p>
+              <p>Input your raw notes, shape them into outputs</p>
             </div>
           </div>
           <div className="header-actions">
@@ -404,50 +402,60 @@ export default function Home() {
               <UndoIcon />
             </button>
             <button
-              onClick={handleCopyStack}
-              disabled={state.stackItems.length === 0}
+              onClick={handleCopyOutput}
+              disabled={!activeOutput || activeOutput.items.length === 0}
               className="icon-btn"
-              data-tooltip={state.stackItems.length === 0 ? 'Stack is empty' : 'Copy Stack as markdown'}
+              data-tooltip={!activeOutput || activeOutput.items.length === 0 ? 'Output is empty' : 'Copy Output as markdown'}
               data-tooltip-position="bottom"
-              aria-label="Copy Stack"
+              aria-label="Copy Output"
             >
               <CopyIcon />
             </button>
             <ExportImport state={state} onImport={handleImport} />
-            <Settings />
+            <Settings onChange={setSettings} />
             <ThemeToggle />
           </div>
         </div>
-        {undoMessage && (
-          <div className="undo-toast">
-            {undoMessage}
-          </div>
-        )}
+        {undoMessage && <div className="undo-toast">{undoMessage}</div>}
       </header>
 
       <div className="main-layout">
         <StreamPane
           items={state.streamItems}
+          batchCount={state.inputBatches.length}
           inputText={inputText}
-          onInputChange={handleInputChange}
+          onInputChange={setInputText}
           onInputBlur={handleInputBlur}
-          onDeleteItem={handleDeleteStreamItem}
-          onMoveToStack={handleMoveToStack}
+          onDeleteItem={handleDeleteInputItem}
+          onMoveToStack={handleMoveToOutput}
           onAddContext={handleAddContext}
-          onEditItem={handleEditStreamItem}
-          onMergeItems={handleMergeItems}
-          onStartProcessing={handleStartProcessing}
-          onAIEdit={handleAIEdit}
-          aiEditing={aiEditing}
-          aiMessage={aiMessage}
-          aiError={aiError}
+          onEditItem={handleEditInputItem}
+          onMergeItems={handleMergeInputItems}
+          onMergeAllDuplicates={handleMergeAllInputDuplicates}
+          matches={inputMatches}
+          selectedIds={selectedInputIds}
+          onSelectionChange={setSelectedInputIds}
+          onMoveSelected={handleMoveSelectedToOutput}
+          additionText={additionText}
+          onAdditionChange={setAdditionText}
+          onAddInputBatch={handleAddInputBatch}
+          onStartProcessing={() => setIsProcessing(true)}
+          onClearStream={handleClearInput}
         />
         <StackPane
-          items={state.stackItems}
-          onDeleteItem={handleDeleteStackItem}
-          onEditItem={handleEditStackItem}
-          onClearAll={handleClearAllStack}
-          onReorder={handleReorderStack}
+          outputs={state.outputs}
+          activeOutputId={state.activeOutputId}
+          onSelectOutput={(id) => setState(prev => ({ ...prev, activeOutputId: id }))}
+          onCreateOutput={handleCreateOutput}
+          onCreateEisenhower={handleCreateEisenhower}
+          onCreateCategories={handleCreateCategories}
+          onDeleteItem={handleDeleteOutputItem}
+          onEditItem={handleEditOutputItem}
+          onClearAll={handleClearActiveOutput}
+          onReorder={handleReorderOutput}
+          onAddToTodoist={handleAddToTodoist}
+          todoistEnabled={settings.todoistApiKey.trim() !== ''}
+          todoistBusy={todoistBusy}
         />
       </div>
 
@@ -455,9 +463,9 @@ export default function Home() {
         <ProcessingMode
           items={getUnprocessedItems()}
           onKeep={handleProcessingStay}
-          onMoveToStack={handleMoveToStack}
-          onDelete={handleDeleteStreamItem}
-          onClose={handleCloseProcessing}
+          onMoveToStack={handleMoveToOutput}
+          onDelete={handleDeleteInputItem}
+          onClose={() => setIsProcessing(false)}
         />
       )}
     </div>

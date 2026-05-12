@@ -1,13 +1,14 @@
 'use client';
 
 import { StreamItem } from '@/types';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import StreamItemComponent from './StreamItemComponent';
-import { findDuplicates } from '@/utils/duplicateDetection';
-import { CheckIcon, SparkleIcon } from './Icons';
+import { findDuplicates, InputMatch } from '@/utils/duplicateDetection';
+import { CheckIcon, TrashIcon } from './Icons';
 
 interface StreamPaneProps {
   items: StreamItem[];
+  batchCount: number;
   inputText: string;
   onInputChange: (text: string) => void;
   onInputBlur: () => void;
@@ -16,15 +17,21 @@ interface StreamPaneProps {
   onAddContext: (id: string, context: string) => void;
   onEditItem: (id: string, text: string) => void;
   onMergeItems: (duplicateId: string, originalId: string) => void;
+  onMergeAllDuplicates?: () => void;
+  matches?: Map<string, InputMatch>;
+  selectedIds: Set<string>;
+  onSelectionChange: (ids: Set<string>) => void;
+  onMoveSelected: () => void;
+  additionText: string;
+  onAdditionChange: (text: string) => void;
+  onAddInputBatch: () => void;
   onStartProcessing?: () => void;
-  onAIEdit?: () => void;
-  aiEditing?: boolean;
-  aiMessage?: string | null;
-  aiError?: string | null;
+  onClearStream?: () => void;
 }
 
 export default function StreamPane({
   items,
+  batchCount,
   inputText,
   onInputChange,
   onInputBlur,
@@ -33,15 +40,27 @@ export default function StreamPane({
   onAddContext,
   onEditItem,
   onMergeItems,
+  onMergeAllDuplicates,
+  matches,
+  selectedIds,
+  onSelectionChange,
+  onMoveSelected,
+  additionText,
+  onAdditionChange,
+  onAddInputBatch,
   onStartProcessing,
-  onAIEdit,
-  aiEditing = false,
-  aiMessage,
-  aiError,
+  onClearStream,
 }: StreamPaneProps) {
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [isSelecting, setIsSelecting] = useState(false);
+  const dragSelectionRef = useRef<Set<string>>(new Set());
 
   const duplicates = useMemo(() => findDuplicates(items), [items]);
+  const outputMatchCount = useMemo(
+    () => Array.from(matches?.values() ?? []).filter(match => match.source === 'output').length,
+    [matches]
+  );
+  const duplicateCount = duplicates.size + outputMatchCount;
 
   useEffect(() => {
     if (inputText) {
@@ -51,6 +70,37 @@ export default function StreamPane({
   }, [inputText]);
 
   const unprocessedCount = items.filter(item => !item.processed).length;
+  const selectedCount = selectedIds.size;
+
+  const toggleSelected = (id: string) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    onSelectionChange(next);
+  };
+
+  const beginDragSelection = (id: string) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    dragSelectionRef.current = next;
+    setIsSelecting(true);
+    onSelectionChange(new Set(next));
+  };
+
+  const extendDragSelection = (id: string) => {
+    if (!isSelecting || dragSelectionRef.current.has(id)) return;
+    const next = new Set(dragSelectionRef.current);
+    next.add(id);
+    dragSelectionRef.current = next;
+    onSelectionChange(new Set(next));
+  };
 
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     e.preventDefault();
@@ -90,45 +140,78 @@ export default function StreamPane({
   };
 
   return (
-    <div className="stream-pane">
-      <div className="stream-header">
-        <h2>STREAM</h2>
-        {lastSaved && (
-          <div className="save-indicator">
-            <CheckIcon />
-            <span>Saved {lastSaved.toLocaleTimeString()}</span>
+    <div
+      className="stream-pane"
+      onPointerUp={() => setIsSelecting(false)}
+      onPointerLeave={() => setIsSelecting(false)}
+    >
+      <div className="stream-header pane-header">
+        <div className="pane-title-block">
+          <div className="pane-title-row">
+            <h2>Input</h2>
+            <span className="count-pill">{items.length}</span>
           </div>
-        )}
-      </div>
+          <div className="pane-meta-row">
+            <span>{unprocessedCount} unprocessed</span>
+            {batchCount > 0 && (
+              <span>{batchCount} batch{batchCount === 1 ? '' : 'es'} saved</span>
+            )}
+            {selectedCount > 0 && (
+              <span>{selectedCount} selected</span>
+            )}
+            {duplicateCount > 0 && (
+              <span className="duplicate-count">{duplicateCount} match{duplicateCount === 1 ? '' : 'es'}</span>
+            )}
+            {lastSaved && (
+              <span className="save-indicator">
+                <CheckIcon />
+                Saved {lastSaved.toLocaleTimeString()}
+              </span>
+            )}
+          </div>
+        </div>
 
-      <div className="stream-actions">
-        {onStartProcessing && (
-          <button
-            className="process-stream-btn"
-            onClick={onStartProcessing}
-            disabled={unprocessedCount === 0}
-            data-tooltip="Step through items one at a time (Cmd/Ctrl+P)"
-            data-tooltip-position="bottom"
-          >
-            Process Stream ({unprocessedCount} items)
-          </button>
-        )}
-        {onAIEdit && (
-          <button
-            className="ai-edit-btn"
-            onClick={onAIEdit}
-            disabled={aiEditing || items.length === 0}
-            data-tooltip={aiEditing ? 'AI editing…' : 'AI Edit — clean up notes and find duplicates'}
-            data-tooltip-position="bottom"
-            aria-label="AI Edit"
-          >
-            <SparkleIcon size={18} />
-          </button>
-        )}
+        <div className="stream-actions pane-actions">
+          {selectedCount > 0 && (
+            <button className="process-stream-btn" onClick={onMoveSelected}>
+              Move {selectedCount}
+            </button>
+          )}
+          {onMergeAllDuplicates && duplicates.size > 0 && (
+            <button
+              className="merge-duplicates-btn"
+              onClick={onMergeAllDuplicates}
+              data-tooltip={`Merge ${duplicates.size} input duplicate${duplicates.size === 1 ? '' : 's'}`}
+              data-tooltip-position="bottom"
+            >
+              Merge input duplicates
+            </button>
+          )}
+          {onStartProcessing && (
+            <button
+              className="process-stream-btn"
+              onClick={onStartProcessing}
+              disabled={unprocessedCount === 0}
+              data-tooltip="Process Input (Cmd/Ctrl+P)"
+              data-tooltip-position="bottom"
+            >
+              Process
+            </button>
+          )}
+          {onClearStream && (
+            <button
+              className="stream-clear-btn"
+              onClick={onClearStream}
+              disabled={items.length === 0 && inputText.trim() === ''}
+              data-tooltip={items.length === 0 && inputText.trim() === '' ? 'Input is empty' : 'Clear Input'}
+              data-tooltip-position="bottom"
+              aria-label="Clear Input"
+            >
+              <TrashIcon size={18} />
+            </button>
+          )}
+        </div>
       </div>
-
-      {aiError && <div className="message error-message inline">{aiError}</div>}
-      {aiMessage && <div className="message success-message inline">{aiMessage}</div>}
 
       <div className="input-area">
         <textarea
@@ -141,32 +224,58 @@ export default function StreamPane({
               setTimeout(() => onInputBlur(), 0);
             }
           }}
-          placeholder="Brain dump here... each line becomes an item (press Enter to create)"
+          placeholder="Paste the first corpus here..."
           autoFocus
           rows={8}
         />
       </div>
 
       <div className="items-list">
-        {items.map((item) => {
-          const duplicateOfId = duplicates.get(item.id);
-          const isDuplicate = !!duplicateOfId;
-          const duplicateOfItem = isDuplicate ? items.find(i => i.id === duplicateOfId) : null;
+        {items.length === 0 && inputText.trim() === '' ? (
+          <div className="empty-state stream-empty">
+            Input is clear.
+          </div>
+        ) : items.map((item) => {
+          const match = matches?.get(item.id);
+          const duplicateOfId = match?.source === 'input' ? match.id : duplicates.get(item.id);
+          const isDuplicate = !!match || !!duplicateOfId;
+          const duplicateOfItem = duplicateOfId ? items.find(i => i.id === duplicateOfId) : null;
 
           return (
             <StreamItemComponent
               key={item.id}
               item={item}
+              selected={selectedIds.has(item.id)}
               onDelete={() => onDeleteItem(item.id)}
               onMoveToStack={() => onMoveToStack(item.id)}
               onAddContext={(context) => onAddContext(item.id, context)}
               onEditText={(text) => onEditItem(item.id, text)}
+              onToggleSelect={() => toggleSelected(item.id)}
+              onPointerSelectStart={() => beginDragSelection(item.id)}
+              onPointerSelectEnter={() => extendDragSelection(item.id)}
               isDuplicate={isDuplicate}
-              duplicateOfText={duplicateOfItem?.text}
-              onMerge={isDuplicate && duplicateOfId ? () => onMergeItems(item.id, duplicateOfId) : undefined}
+              duplicateOfText={match?.source === 'output' ? `${match.outputName}: ${match.text}` : duplicateOfItem?.text}
+              duplicateSource={match?.source}
+              onMerge={match?.source !== 'output' && duplicateOfId ? () => onMergeItems(item.id, duplicateOfId) : undefined}
             />
           );
         })}
+      </div>
+
+      <div className="bottom-composer">
+        <textarea
+          value={additionText}
+          onChange={(e) => onAdditionChange(e.target.value)}
+          placeholder="Add more input at the bottom..."
+          rows={3}
+        />
+        <button
+          className="process-stream-btn"
+          onClick={onAddInputBatch}
+          disabled={additionText.trim() === ''}
+        >
+          Add input
+        </button>
       </div>
     </div>
   );

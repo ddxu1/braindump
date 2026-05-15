@@ -138,7 +138,7 @@ export default function ProcessingMode({
     <div className="processing-mode">
       <div className="processing-modal">
         <div className="processing-header">
-          <h3>Process Stream</h3>
+          <h3>Process Input</h3>
           <div className="processing-progress">
             Item {index + 1} of {queue.length}
           </div>
@@ -178,7 +178,7 @@ export default function ProcessingMode({
           </button>
           <button onClick={handleMove} className="processing-btn move">
             <span className="shortcut">D</span>
-            Move to Stack
+            Move to Output
           </button>
         </div>
       </div>

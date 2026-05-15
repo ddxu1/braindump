@@ -162,19 +162,6 @@ export const HelpIcon = ({ size = 14, className }: IconProps) => (
   </svg>
 );
 
-export const SparkleIcon = ({ size = 16, className }: IconProps) => (
-  <svg {...baseProps(size, className)}>
-    <path d="M12 3v4" />
-    <path d="M12 17v4" />
-    <path d="M3 12h4" />
-    <path d="M17 12h4" />
-    <path d="M5.6 5.6l2.8 2.8" />
-    <path d="M15.6 15.6l2.8 2.8" />
-    <path d="M5.6 18.4l2.8-2.8" />
-    <path d="M15.6 8.4l2.8-2.8" />
-  </svg>
-);
-
 export const BrainIcon = ({ size = 32, className }: IconProps) => (
   <svg
     width={size}

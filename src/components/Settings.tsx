@@ -11,7 +11,7 @@ interface SettingsProps {
 export default function Settings({ onChange }: SettingsProps) {
   const [open, setOpen] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(loadSettings);
-  const [showKey, setShowKey] = useState(false);
+  const [showTodoistKey, setShowTodoistKey] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -62,7 +62,7 @@ export default function Settings({ onChange }: SettingsProps) {
             <div className="settings-section">
               <label className="settings-label">Markdown bullet style</label>
               <p className="settings-description">
-                How items are formatted when copying the Stack as markdown.
+                How items are formatted when copying the Output as markdown.
               </p>
               <div className="settings-options">
                 <label className={`settings-option ${settings.bulletStyle === 'checkbox' ? 'active' : ''}`}>
@@ -96,41 +96,29 @@ export default function Settings({ onChange }: SettingsProps) {
             </div>
 
             <div className="settings-section">
-              <label className="settings-label" htmlFor="grok-api-key">Grok API key</label>
+              <label className="settings-label" htmlFor="todoist-api-key">Todoist API key</label>
               <p className="settings-description">
-                Stored locally in your browser. Used by AI Edit to clean up notes
-                and find duplicates. Get one at console.x.ai.
+                Stored locally in this browser. When present, Output items can be sent to Todoist.
               </p>
               <div className="settings-input-row">
                 <input
-                  id="grok-api-key"
-                  type={showKey ? 'text' : 'password'}
+                  id="todoist-api-key"
+                  type={showTodoistKey ? 'text' : 'password'}
                   className="settings-input"
-                  placeholder="xai-..."
-                  value={settings.grokApiKey}
-                  onChange={(e) => update({ grokApiKey: e.target.value })}
+                  placeholder="Todoist API token"
+                  value={settings.todoistApiKey}
+                  onChange={(e) => update({ todoistApiKey: e.target.value })}
                   autoComplete="off"
                   spellCheck={false}
                 />
                 <button
                   type="button"
                   className="settings-secondary-btn"
-                  onClick={() => setShowKey(v => !v)}
+                  onClick={() => setShowTodoistKey(value => !value)}
                 >
-                  {showKey ? 'Hide' : 'Show'}
+                  {showTodoistKey ? 'Hide' : 'Show'}
                 </button>
               </div>
-
-              <label className="settings-label settings-label-sub" htmlFor="grok-model">Model</label>
-              <input
-                id="grok-model"
-                type="text"
-                className="settings-input"
-                value={settings.grokModel}
-                onChange={(e) => update({ grokModel: e.target.value })}
-                placeholder="grok-4-1-fast-thinking"
-                spellCheck={false}
-              />
             </div>
           </div>
         </div>

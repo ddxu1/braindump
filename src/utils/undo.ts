@@ -1,7 +1,7 @@
 import { AppState } from '@/types';
 
 export interface HistoryAction {
-  type: 'delete-stack' | 'delete-stream' | 'move-to-stack' | 'clear-all' | 'edit-stack' | 'edit-stream' | 'reorder';
+  type: 'delete-stack' | 'delete-stream' | 'move-to-stack' | 'clear-all' | 'clear-stream' | 'merge-duplicates' | 'edit-stack' | 'edit-stream' | 'reorder';
   description: string;
   previousState: AppState;
   timestamp: number;

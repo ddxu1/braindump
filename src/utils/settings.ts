@@ -2,16 +2,14 @@ export type BulletStyle = 'checkbox' | 'dash';
 
 export interface AppSettings {
   bulletStyle: BulletStyle;
-  grokApiKey: string;
-  grokModel: string;
+  todoistApiKey: string;
 }
 
 const SETTINGS_KEY = 'braindump-settings';
 
 export const DEFAULT_SETTINGS: AppSettings = {
   bulletStyle: 'checkbox',
-  grokApiKey: '',
-  grokModel: 'grok-4-1-fast-thinking',
+  todoistApiKey: '',
 };
 
 export const loadSettings = (): AppSettings => {

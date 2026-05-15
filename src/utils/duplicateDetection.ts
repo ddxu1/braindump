@@ -1,4 +1,4 @@
-import { StreamItem } from '@/types';
+import { Output, StackItem, StreamItem } from '@/types';
 
 /**
  * Calculates Levenshtein distance between two strings
@@ -72,6 +72,56 @@ export function findDuplicates(
   }
 
   return duplicates;
+}
+
+export interface InputMatch {
+  source: 'input' | 'output';
+  id: string;
+  text: string;
+  outputName?: string;
+}
+
+export function findInputMatches(
+  inputItems: StreamItem[],
+  outputs: Output[],
+  threshold: number = 80
+): Map<string, InputMatch> {
+  const matches = new Map<string, InputMatch>();
+  const inputDuplicates = findDuplicates(inputItems, threshold);
+
+  inputDuplicates.forEach((originalId, duplicateId) => {
+    const original = inputItems.find(item => item.id === originalId);
+    if (original) {
+      matches.set(duplicateId, {
+        source: 'input',
+        id: original.id,
+        text: original.text,
+      });
+    }
+  });
+
+  const outputItems: Array<StackItem & { outputName: string }> = outputs.flatMap(output =>
+    output.items.map(item => ({ ...item, outputName: output.name }))
+  );
+
+  for (const inputItem of inputItems) {
+    if (matches.get(inputItem.id)?.source === 'input') continue;
+
+    const outputMatch = outputItems.find(outputItem =>
+      calculateSimilarity(inputItem.text, outputItem.text) >= threshold
+    );
+
+    if (outputMatch) {
+      matches.set(inputItem.id, {
+        source: 'output',
+        id: outputMatch.id,
+        text: outputMatch.text,
+        outputName: outputMatch.outputName,
+      });
+    }
+  }
+
+  return matches;
 }
 
 /**

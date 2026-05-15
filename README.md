@@ -1,12 +1,14 @@
 # BrainDump
 
-BrainDump is a Next.js app for turning a raw stream of notes into an organized stack of actions.
+BrainDump is a Next.js app for turning raw input into organized outputs.
 
 ## Features
 
-- Capture one thought per line into a stream.
-- Process stream items one by one with keyboard shortcuts.
-- Move useful items into a stack with context, category, priority, and due date fields.
+- Capture one thought per line into Input.
+- Process input items one by one with keyboard shortcuts.
+- Move useful items into one or more Outputs.
+- Preserve added input batches for later reconstruction.
+- Optionally send Output items to Todoist with a locally stored API key.
 - Export and import app state.
 - Store data locally in the browser.
 

@@ -38,11 +38,11 @@ export default function StackItemComponent({
   const getPriorityColor = (priority: string | null) => {
     switch (priority) {
       case 'high':
-        return '#EF4444';
+        return 'var(--danger)';
       case 'medium':
-        return '#F59E0B';
+        return 'var(--accent)';
       case 'low':
-        return '#10B981';
+        return 'var(--text-tertiary)';
       default:
         return 'transparent';
     }

@@ -1,16 +1,25 @@
-import { AppState, StackItem } from '@/types';
+import { AppState, Output, StackItem } from '@/types';
 import { BulletStyle, formatBullet, loadSettings } from './settings';
+import { normalizeState } from './storage';
 
 export const buildMarkdown = (stackItems: StackItem[], style?: BulletStyle): string => {
   const bulletStyle = style ?? loadSettings().bulletStyle;
   return stackItems.map(item => formatBullet(item.text, bulletStyle)).join('\n');
 };
 
-export const copyStackToClipboard = async (
-  stackItems: StackItem[],
-  style?: BulletStyle,
-): Promise<void> => {
-  const markdown = buildMarkdown(stackItems, style);
+export const buildOutputsMarkdown = (outputs: Output[], style?: BulletStyle): string => {
+  const bulletStyle = style ?? loadSettings().bulletStyle;
+
+  return outputs
+    .filter(output => output.items.length > 0)
+    .map(output => [
+      output.name,
+      ...output.items.map(item => formatBullet(item.text, bulletStyle)),
+    ].join('\n'))
+    .join('\n\n');
+};
+
+const copyMarkdownToClipboard = async (markdown: string): Promise<void> => {
   await navigator.clipboard.writeText(markdown);
 
   const alert = document.createElement('div');
@@ -35,6 +44,20 @@ export const copyStackToClipboard = async (
     alert.style.animation = 'slideOut 0.3s ease-out';
     setTimeout(() => document.body.removeChild(alert), 300);
   }, 2000);
+};
+
+export const copyStackToClipboard = async (
+  stackItems: StackItem[],
+  style?: BulletStyle,
+): Promise<void> => {
+  await copyMarkdownToClipboard(buildMarkdown(stackItems, style));
+};
+
+export const copyOutputsToClipboard = async (
+  outputs: Output[],
+  style?: BulletStyle,
+): Promise<void> => {
+  await copyMarkdownToClipboard(buildOutputsMarkdown(outputs, style));
 };
 
 export const exportToJSON = (state: AppState): void => {
@@ -62,9 +85,9 @@ export const importFromJSON = (file: File): Promise<AppState> => {
           throw new Error('Invalid file content');
         }
 
-        const data = JSON.parse(result) as AppState;
+        const data = normalizeState(JSON.parse(result));
 
-        if (!data.streamItems || !data.stackItems) {
+        if (!data.streamItems || !data.outputs) {
           throw new Error('Invalid backup file structure');
         }
 

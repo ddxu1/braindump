@@ -8,6 +8,14 @@ export interface StreamItem {
   duplicateOf: string | null;
 }
 
+export interface InputBatch {
+  id: string;
+  text: string;
+  createdAt: number;
+  itemIds: string[];
+  source: 'initial' | 'addition' | 'import';
+}
+
 // Stack Item
 export interface StackItem {
   id: string;
@@ -19,7 +27,18 @@ export interface StackItem {
   order: number;
 }
 
+export type OutputPreset = 'custom' | 'eisenhower' | 'category';
+
+export interface Output {
+  id: string;
+  name: string;
+  preset: OutputPreset;
+  items: StackItem[];
+}
+
 export interface AppState {
   streamItems: StreamItem[];
-  stackItems: StackItem[];
+  inputBatches: InputBatch[];
+  outputs: Output[];
+  activeOutputId: string;
 }

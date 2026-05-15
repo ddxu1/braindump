@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import type { FormEvent } from 'react';
 import { AppSettings, DEFAULT_SETTINGS, loadSettings } from '@/utils/settings';
 import { StreamItem, StackItem, AppState, Output } from '@/types';
 import { loadState, saveState, generateId, normalizeState } from '@/utils/storage';
 import { findDuplicates, findInputMatches } from '@/utils/duplicateDetection';
-import { copyStackToClipboard } from '@/utils/exportImport';
+import { copyOutputsToClipboard, copyStackToClipboard } from '@/utils/exportImport';
 import { addTasksToTodoist } from '@/utils/todoist';
 import { UndoManager, HistoryAction } from '@/utils/undo';
 import StreamPane from '@/components/StreamPane';
@@ -18,6 +19,8 @@ import { BrainIcon, CopyIcon, UndoIcon } from '@/components/Icons';
 import './styles.css';
 
 const EISENHOWER_OUTPUTS = ['Do now', 'Schedule', 'Delegate', 'Later'];
+type DialogTarget = 'input' | 'output' | 'delete-output' | null;
+type OutputMode = 'blank' | 'eisenhower' | 'categories';
 
 export default function Home() {
   const [state, setState] = useState<AppState>(() => normalizeState({}));
@@ -30,16 +33,32 @@ export default function Home() {
   const [undoMessage, setUndoMessage] = useState<string | null>(null);
   const [canUndo, setCanUndo] = useState(false);
   const [todoistBusy, setTodoistBusy] = useState(false);
+  const [dialogTarget, setDialogTarget] = useState<DialogTarget>(null);
+  const [createOutputOpen, setCreateOutputOpen] = useState(false);
+  const [outputMode, setOutputMode] = useState<OutputMode>('blank');
+  const [newOutputName, setNewOutputName] = useState('');
+  const [categoryNames, setCategoryNames] = useState('');
   const undoManager = useRef(new UndoManager());
+  const confirmDialogActionRef = useRef<() => void>(() => {});
 
   const activeOutput = useMemo(
     () => state.outputs.find(output => output.id === state.activeOutputId) ?? state.outputs[0],
     [state.outputs, state.activeOutputId]
   );
+  const createOutputDisabled =
+    outputMode === 'blank'
+      ? newOutputName.trim() === ''
+      : outputMode === 'categories'
+        ? categoryNames.split(',').map(name => name.trim()).filter(Boolean).length === 0
+        : false;
 
   const inputMatches = useMemo(
     () => findInputMatches(state.streamItems, state.outputs),
     [state.streamItems, state.outputs]
+  );
+  const totalOutputItems = useMemo(
+    () => state.outputs.reduce((total, output) => total + output.items.length, 0),
+    [state.outputs]
   );
 
   useEffect(() => {
@@ -185,38 +204,40 @@ export default function Home() {
 
   const handleClearInput = () => {
     if (state.streamItems.length === 0 && inputText.trim() === '') return;
+    setDialogTarget('input');
+  };
 
-    const confirmed = window.confirm(`Clear all ${state.streamItems.length} items from Input?`);
-    if (!confirmed) return;
-
+  const confirmClearInput = () => {
     saveForUndo('clear-stream', `Clear all ${state.streamItems.length} items from Input`);
     setState(prev => ({ ...prev, streamItems: [] }));
     setInputText('');
     setSelectedInputIds(new Set());
     setIsProcessing(false);
+    setDialogTarget(null);
   };
 
-  const moveInputItemsToOutput = (ids: Set<string>) => {
+  const moveInputItemsToOutput = (ids: Set<string>, outputId = state.activeOutputId) => {
     const movingItems = state.streamItems.filter(item => ids.has(item.id));
-    if (!activeOutput || movingItems.length === 0) return;
+    const targetOutput = state.outputs.find(output => output.id === outputId) ?? activeOutput;
+    if (!targetOutput || movingItems.length === 0) return;
 
-    saveForUndo('move-to-stack', `Move ${movingItems.length} item${movingItems.length === 1 ? '' : 's'} to ${activeOutput.name}`);
+    saveForUndo('move-to-stack', `Move ${movingItems.length} item${movingItems.length === 1 ? '' : 's'} to ${targetOutput.name}`);
 
     const outputItems: StackItem[] = movingItems.map((streamItem, index) => ({
       id: generateId(),
       text: streamItem.text,
       context: streamItem.context,
-      category: activeOutput.preset === 'category' ? activeOutput.name : null,
+      category: targetOutput.preset === 'category' ? targetOutput.name : null,
       priority: null,
       dueDate: null,
-      order: activeOutput.items.length + index,
+      order: targetOutput.items.length + index,
     }));
 
     setState(prev => ({
       ...prev,
       streamItems: prev.streamItems.filter(item => !ids.has(item.id)),
       outputs: prev.outputs.map(output =>
-        output.id === prev.activeOutputId
+        output.id === targetOutput.id
           ? { ...output, items: [...output.items, ...outputItems] }
           : output
       ),
@@ -225,8 +246,8 @@ export default function Home() {
     setSelectedInputIds(new Set());
   };
 
-  const handleMoveToOutput = (id: string) => moveInputItemsToOutput(new Set([id]));
-  const handleMoveSelectedToOutput = () => moveInputItemsToOutput(selectedInputIds);
+  const handleMoveToOutput = (id: string, outputId: string) => moveInputItemsToOutput(new Set([id]), outputId);
+  const handleMoveSelectedToSpecificOutput = (outputId: string) => moveInputItemsToOutput(selectedInputIds, outputId);
 
   const handleAddContext = (id: string, context: string) => {
     setState(prev => ({
@@ -258,11 +279,66 @@ export default function Home() {
 
   const handleClearActiveOutput = () => {
     if (!activeOutput || activeOutput.items.length === 0) return;
-    const confirmed = window.confirm(`Clear all ${activeOutput.items.length} items from ${activeOutput.name}?`);
-    if (!confirmed) return;
+    setDialogTarget('output');
+  };
+
+  const confirmClearActiveOutput = () => {
+    if (!activeOutput || activeOutput.items.length === 0) return;
     saveForUndo('clear-all', `Clear ${activeOutput.name}`);
     updateActiveOutput(() => []);
+    setDialogTarget(null);
   };
+
+  const handleDeleteActiveOutput = () => {
+    if (!activeOutput || state.outputs.length <= 1) return;
+    setDialogTarget('delete-output');
+  };
+
+  const confirmDeleteActiveOutput = () => {
+    if (!activeOutput || state.outputs.length <= 1) return;
+
+    const activeIndex = state.outputs.findIndex(output => output.id === activeOutput.id);
+    const nextOutputs = state.outputs.filter(output => output.id !== activeOutput.id);
+    const nextActiveOutput = nextOutputs[Math.max(0, activeIndex - 1)] ?? nextOutputs[0];
+
+    saveForUndo('delete-stack', `Delete output "${activeOutput.name}"`);
+    setState(prev => ({
+      ...prev,
+      outputs: prev.outputs.filter(output => output.id !== activeOutput.id),
+      activeOutputId: nextActiveOutput.id,
+    }));
+    setDialogTarget(null);
+  };
+
+  confirmDialogActionRef.current = () => {
+    if (dialogTarget === 'input') {
+      confirmClearInput();
+      return;
+    }
+
+    if (dialogTarget === 'output') {
+      confirmClearActiveOutput();
+      return;
+    }
+
+    if (dialogTarget === 'delete-output') {
+      confirmDeleteActiveOutput();
+    }
+  };
+
+  useEffect(() => {
+    if (!dialogTarget) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        confirmDialogActionRef.current();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [dialogTarget]);
 
   const handleReorderOutput = (reorderedItems: StackItem[]) => {
     saveForUndo('reorder', `Reorder ${activeOutput?.name ?? 'Output'} items`);
@@ -317,14 +393,10 @@ export default function Home() {
   });
 
   const handleCreateOutput = () => {
-    const name = window.prompt('Output name');
-    if (!name?.trim()) return;
-    const output = createOutput(name.trim());
-    setState(prev => ({
-      ...prev,
-      outputs: [...prev.outputs, output],
-      activeOutputId: output.id,
-    }));
+    setOutputMode('blank');
+    setNewOutputName('');
+    setCategoryNames('');
+    setCreateOutputOpen(true);
   };
 
   const handleCreateEisenhower = () => {
@@ -336,9 +408,8 @@ export default function Home() {
     }));
   };
 
-  const handleCreateCategories = () => {
-    const raw = window.prompt('Categories, comma-separated');
-    const names = raw?.split(',').map(name => name.trim()).filter(Boolean) ?? [];
+  const handleCreateCategories = (raw: string) => {
+    const names = raw.split(',').map(name => name.trim()).filter(Boolean);
     if (names.length === 0) return;
     const newOutputs = names.map(name => createOutput(name, 'category'));
     setState(prev => ({
@@ -346,6 +417,39 @@ export default function Home() {
       outputs: [...prev.outputs, ...newOutputs],
       activeOutputId: newOutputs[0].id,
     }));
+  };
+
+  const handleCreateOutputSubmit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    if (outputMode === 'eisenhower') {
+      handleCreateEisenhower();
+      setCreateOutputOpen(false);
+      return;
+    }
+
+    if (outputMode === 'categories') {
+      const names = categoryNames.split(',').map(name => name.trim()).filter(Boolean);
+      if (names.length === 0) return;
+      handleCreateCategories(categoryNames);
+      setCreateOutputOpen(false);
+      return;
+    }
+
+    const name = newOutputName.trim();
+    if (!name) return;
+    const output = createOutput(name);
+    setState(prev => ({
+      ...prev,
+      outputs: [...prev.outputs, output],
+      activeOutputId: output.id,
+    }));
+    setCreateOutputOpen(false);
+  };
+
+  const handleCopyAllOutputs = async () => {
+    if (totalOutputItems === 0) return;
+    await copyOutputsToClipboard(state.outputs);
   };
 
   const handleCopyOutput = async () => {
@@ -402,12 +506,12 @@ export default function Home() {
               <UndoIcon />
             </button>
             <button
-              onClick={handleCopyOutput}
-              disabled={!activeOutput || activeOutput.items.length === 0}
+              onClick={handleCopyAllOutputs}
+              disabled={totalOutputItems === 0}
               className="icon-btn"
-              data-tooltip={!activeOutput || activeOutput.items.length === 0 ? 'Output is empty' : 'Copy Output as markdown'}
+              data-tooltip={totalOutputItems === 0 ? 'Outputs are empty' : 'Copy all outputs as markdown'}
               data-tooltip-position="bottom"
-              aria-label="Copy Output"
+              aria-label="Copy all outputs"
             >
               <CopyIcon />
             </button>
@@ -422,7 +526,7 @@ export default function Home() {
       <div className="main-layout">
         <StreamPane
           items={state.streamItems}
-          batchCount={state.inputBatches.length}
+          outputs={state.outputs}
           inputText={inputText}
           onInputChange={setInputText}
           onInputBlur={handleInputBlur}
@@ -435,7 +539,7 @@ export default function Home() {
           matches={inputMatches}
           selectedIds={selectedInputIds}
           onSelectionChange={setSelectedInputIds}
-          onMoveSelected={handleMoveSelectedToOutput}
+          onMoveSelectedToOutput={handleMoveSelectedToSpecificOutput}
           additionText={additionText}
           onAdditionChange={setAdditionText}
           onAddInputBatch={handleAddInputBatch}
@@ -447,11 +551,11 @@ export default function Home() {
           activeOutputId={state.activeOutputId}
           onSelectOutput={(id) => setState(prev => ({ ...prev, activeOutputId: id }))}
           onCreateOutput={handleCreateOutput}
-          onCreateEisenhower={handleCreateEisenhower}
-          onCreateCategories={handleCreateCategories}
           onDeleteItem={handleDeleteOutputItem}
           onEditItem={handleEditOutputItem}
           onClearAll={handleClearActiveOutput}
+          onDeleteOutput={handleDeleteActiveOutput}
+          onCopyOutput={handleCopyOutput}
           onReorder={handleReorderOutput}
           onAddToTodoist={handleAddToTodoist}
           todoistEnabled={settings.todoistApiKey.trim() !== ''}
@@ -463,10 +567,131 @@ export default function Home() {
         <ProcessingMode
           items={getUnprocessedItems()}
           onKeep={handleProcessingStay}
-          onMoveToStack={handleMoveToOutput}
+          onMoveToStack={(id) => moveInputItemsToOutput(new Set([id]))}
           onDelete={handleDeleteInputItem}
           onClose={() => setIsProcessing(false)}
         />
+      )}
+
+      {dialogTarget && (
+        <div className="app-dialog-overlay" role="presentation" onClick={() => setDialogTarget(null)}>
+          <div
+            className="app-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="clear-dialog-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="app-dialog-header">
+              <h3 id="clear-dialog-title">
+                {dialogTarget === 'delete-output'
+                  ? `Delete ${activeOutput?.name}`
+                  : `Clear ${dialogTarget === 'input' ? 'Input' : activeOutput?.name}`}
+              </h3>
+              <button className="dialog-close" onClick={() => setDialogTarget(null)} aria-label="Close">
+                ×
+              </button>
+            </div>
+            <p className="app-dialog-copy">
+              {dialogTarget === 'input' &&
+                `This removes ${state.streamItems.length} input item${state.streamItems.length === 1 ? '' : 's'} from the current stream.`}
+              {dialogTarget === 'output' &&
+                `This removes ${activeOutput?.items.length ?? 0} item${activeOutput?.items.length === 1 ? '' : 's'} from this output.`}
+              {dialogTarget === 'delete-output' &&
+                `This deletes the output and its ${activeOutput?.items.length ?? 0} item${activeOutput?.items.length === 1 ? '' : 's'}.`}
+            </p>
+            <div className="app-dialog-actions">
+              <button className="secondary-btn" onClick={() => setDialogTarget(null)}>
+                Cancel
+              </button>
+              <button
+                className="danger-btn"
+                onClick={
+                  dialogTarget === 'input'
+                    ? confirmClearInput
+                    : dialogTarget === 'output'
+                      ? confirmClearActiveOutput
+                      : confirmDeleteActiveOutput
+                }
+              >
+                {dialogTarget === 'delete-output' ? 'Delete' : 'Clear'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {createOutputOpen && (
+        <div className="app-dialog-overlay" role="presentation" onClick={() => setCreateOutputOpen(false)}>
+          <form
+            className="app-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="create-output-title"
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={handleCreateOutputSubmit}
+          >
+            <div className="app-dialog-header">
+              <h3 id="create-output-title">New output</h3>
+              <button type="button" className="dialog-close" onClick={() => setCreateOutputOpen(false)} aria-label="Close">
+                ×
+              </button>
+            </div>
+
+            <div className="mode-grid" role="radiogroup" aria-label="Output type">
+              {[
+                { value: 'blank', label: 'Blank', description: 'One focused output list.' },
+                { value: 'eisenhower', label: 'Eisenhower', description: 'Do now, schedule, delegate, later.' },
+                { value: 'categories', label: 'Categories', description: 'Create several named outputs.' },
+              ].map(option => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`mode-card ${outputMode === option.value ? 'active' : ''}`}
+                  onClick={() => setOutputMode(option.value as OutputMode)}
+                  role="radio"
+                  aria-checked={outputMode === option.value}
+                >
+                  <strong>{option.label}</strong>
+                  <span>{option.description}</span>
+                </button>
+              ))}
+            </div>
+
+            {outputMode === 'blank' && (
+              <label className="dialog-field">
+                <span>Name</span>
+                <input
+                  value={newOutputName}
+                  onChange={(e) => setNewOutputName(e.target.value)}
+                  placeholder="Tasks, Notes, Follow-ups..."
+                  autoFocus
+                />
+              </label>
+            )}
+
+            {outputMode === 'categories' && (
+              <label className="dialog-field">
+                <span>Categories</span>
+                <input
+                  value={categoryNames}
+                  onChange={(e) => setCategoryNames(e.target.value)}
+                  placeholder="Work, Personal, Errands"
+                  autoFocus
+                />
+              </label>
+            )}
+
+            <div className="app-dialog-actions">
+              <button type="button" className="secondary-btn" onClick={() => setCreateOutputOpen(false)}>
+                Cancel
+              </button>
+              <button className="primary-btn" type="submit" disabled={createOutputDisabled}>
+                Create
+              </button>
+            </div>
+          </form>
+        </div>
       )}
     </div>
   );

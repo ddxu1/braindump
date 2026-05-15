@@ -1,19 +1,18 @@
 'use client';
 
-import { StreamItem } from '@/types';
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { Output, StreamItem } from '@/types';
+import { useState, useEffect, useMemo } from 'react';
 import StreamItemComponent from './StreamItemComponent';
 import { findDuplicates, InputMatch } from '@/utils/duplicateDetection';
 import { CheckIcon, TrashIcon } from './Icons';
 
 interface StreamPaneProps {
   items: StreamItem[];
-  batchCount: number;
   inputText: string;
   onInputChange: (text: string) => void;
   onInputBlur: () => void;
   onDeleteItem: (id: string) => void;
-  onMoveToStack: (id: string) => void;
+  onMoveToStack: (id: string, outputId: string) => void;
   onAddContext: (id: string, context: string) => void;
   onEditItem: (id: string, text: string) => void;
   onMergeItems: (duplicateId: string, originalId: string) => void;
@@ -21,7 +20,8 @@ interface StreamPaneProps {
   matches?: Map<string, InputMatch>;
   selectedIds: Set<string>;
   onSelectionChange: (ids: Set<string>) => void;
-  onMoveSelected: () => void;
+  onMoveSelectedToOutput: (outputId: string) => void;
+  outputs: Output[];
   additionText: string;
   onAdditionChange: (text: string) => void;
   onAddInputBatch: () => void;
@@ -31,7 +31,6 @@ interface StreamPaneProps {
 
 export default function StreamPane({
   items,
-  batchCount,
   inputText,
   onInputChange,
   onInputBlur,
@@ -44,7 +43,8 @@ export default function StreamPane({
   matches,
   selectedIds,
   onSelectionChange,
-  onMoveSelected,
+  onMoveSelectedToOutput,
+  outputs,
   additionText,
   onAdditionChange,
   onAddInputBatch,
@@ -52,15 +52,16 @@ export default function StreamPane({
   onClearStream,
 }: StreamPaneProps) {
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
-  const [isSelecting, setIsSelecting] = useState(false);
-  const dragSelectionRef = useRef<Set<string>>(new Set());
+  const [showAdditionComposer, setShowAdditionComposer] = useState(false);
+  const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
+  const [lastShiftRangeIds, setLastShiftRangeIds] = useState<string[]>([]);
 
   const duplicates = useMemo(() => findDuplicates(items), [items]);
   const outputMatchCount = useMemo(
     () => Array.from(matches?.values() ?? []).filter(match => match.source === 'output').length,
     [matches]
   );
-  const duplicateCount = duplicates.size + outputMatchCount;
+  const inputDuplicateCount = duplicates.size;
 
   useEffect(() => {
     if (inputText) {
@@ -71,8 +72,50 @@ export default function StreamPane({
 
   const unprocessedCount = items.filter(item => !item.processed).length;
   const selectedCount = selectedIds.size;
+  const existingItemTexts = useMemo(() => new Set(items.map(item => item.text)), [items]);
+  const draftLineCount = inputText
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line && !existingItemTexts.has(line))
+    .length;
 
-  const toggleSelected = (id: string) => {
+  const handleSelectionClick = (id: string, shiftKey: boolean) => {
+    if (shiftKey && lastSelectedId) {
+      if (lastShiftRangeIds.includes(id)) {
+        const next = new Set(selectedIds);
+        const rangeIsSelected = lastShiftRangeIds.every(rangeId => next.has(rangeId));
+
+        if (rangeIsSelected) {
+          lastShiftRangeIds.forEach(rangeId => next.delete(rangeId));
+          onSelectionChange(next);
+          setLastShiftRangeIds([]);
+          return;
+        }
+      }
+
+      const startIndex = items.findIndex(item => item.id === lastSelectedId);
+      const endIndex = items.findIndex(item => item.id === id);
+
+      if (startIndex !== -1 && endIndex !== -1) {
+        const [start, end] = [startIndex, endIndex].sort((a, b) => a - b);
+        const next = new Set(selectedIds);
+        const range = items.slice(start, end + 1);
+        const rangeIsSelected = range.every(item => next.has(item.id));
+
+        range.forEach(item => {
+          if (rangeIsSelected) {
+            next.delete(item.id);
+          } else {
+            next.add(item.id);
+          }
+        });
+
+        onSelectionChange(next);
+        setLastShiftRangeIds(range.map(item => item.id));
+        return;
+      }
+    }
+
     const next = new Set(selectedIds);
     if (next.has(id)) {
       next.delete(id);
@@ -80,26 +123,8 @@ export default function StreamPane({
       next.add(id);
     }
     onSelectionChange(next);
-  };
-
-  const beginDragSelection = (id: string) => {
-    const next = new Set(selectedIds);
-    if (next.has(id)) {
-      next.delete(id);
-    } else {
-      next.add(id);
-    }
-    dragSelectionRef.current = next;
-    setIsSelecting(true);
-    onSelectionChange(new Set(next));
-  };
-
-  const extendDragSelection = (id: string) => {
-    if (!isSelecting || dragSelectionRef.current.has(id)) return;
-    const next = new Set(dragSelectionRef.current);
-    next.add(id);
-    dragSelectionRef.current = next;
-    onSelectionChange(new Set(next));
+    setLastSelectedId(id);
+    setLastShiftRangeIds([]);
   };
 
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -139,12 +164,22 @@ export default function StreamPane({
     }, 0);
   };
 
+  const handleAddMore = () => {
+    onAddInputBatch();
+    setShowAdditionComposer(false);
+  };
+
+  const handleItemMove = (id: string, outputId: string) => {
+    if (selectedIds.size > 0) {
+      onMoveSelectedToOutput(outputId);
+      return;
+    }
+
+    onMoveToStack(id, outputId);
+  };
+
   return (
-    <div
-      className="stream-pane"
-      onPointerUp={() => setIsSelecting(false)}
-      onPointerLeave={() => setIsSelecting(false)}
-    >
+    <div className="stream-pane">
       <div className="stream-header pane-header">
         <div className="pane-title-block">
           <div className="pane-title-row">
@@ -152,31 +187,32 @@ export default function StreamPane({
             <span className="count-pill">{items.length}</span>
           </div>
           <div className="pane-meta-row">
-            <span>{unprocessedCount} unprocessed</span>
-            {batchCount > 0 && (
-              <span>{batchCount} batch{batchCount === 1 ? '' : 'es'} saved</span>
+            {items.length > 0 && (
+              <span>{unprocessedCount > 0 ? `${unprocessedCount} to process` : 'All processed'}</span>
             )}
             {selectedCount > 0 && (
               <span>{selectedCount} selected</span>
             )}
-            {duplicateCount > 0 && (
-              <span className="duplicate-count">{duplicateCount} match{duplicateCount === 1 ? '' : 'es'}</span>
+            {outputMatchCount > 0 && (
+              <span className="duplicate-count">
+                {outputMatchCount} already in output
+              </span>
+            )}
+            {inputDuplicateCount > 0 && (
+              <span className="duplicate-count">
+                {inputDuplicateCount} duplicate{inputDuplicateCount === 1 ? '' : 's'}
+              </span>
             )}
             {lastSaved && (
               <span className="save-indicator">
                 <CheckIcon />
-                Saved {lastSaved.toLocaleTimeString()}
+                Saved locally
               </span>
             )}
           </div>
         </div>
 
         <div className="stream-actions pane-actions">
-          {selectedCount > 0 && (
-            <button className="process-stream-btn" onClick={onMoveSelected}>
-              Move {selectedCount}
-            </button>
-          )}
           {onMergeAllDuplicates && duplicates.size > 0 && (
             <button
               className="merge-duplicates-btn"
@@ -224,10 +260,18 @@ export default function StreamPane({
               setTimeout(() => onInputBlur(), 0);
             }
           }}
-          placeholder="Paste the first corpus here..."
+          placeholder="Dump raw notes here. One line becomes one input item."
           autoFocus
-          rows={8}
+          rows={items.length > 0 ? 4 : 8}
         />
+        {draftLineCount > 0 && (
+          <div className="capture-row">
+            <span>{draftLineCount} new item{draftLineCount === 1 ? '' : 's'}</span>
+            <button className="process-stream-btn" onClick={onInputBlur}>
+              Add to Input
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="items-list">
@@ -247,36 +291,54 @@ export default function StreamPane({
               item={item}
               selected={selectedIds.has(item.id)}
               onDelete={() => onDeleteItem(item.id)}
-              onMoveToStack={() => onMoveToStack(item.id)}
+              onMoveToStack={(outputId) => handleItemMove(item.id, outputId)}
               onAddContext={(context) => onAddContext(item.id, context)}
               onEditText={(text) => onEditItem(item.id, text)}
-              onToggleSelect={() => toggleSelected(item.id)}
-              onPointerSelectStart={() => beginDragSelection(item.id)}
-              onPointerSelectEnter={() => extendDragSelection(item.id)}
+              onSelectClick={(shiftKey) => handleSelectionClick(item.id, shiftKey)}
               isDuplicate={isDuplicate}
               duplicateOfText={match?.source === 'output' ? `${match.outputName}: ${match.text}` : duplicateOfItem?.text}
               duplicateSource={match?.source}
               onMerge={match?.source !== 'output' && duplicateOfId ? () => onMergeItems(item.id, duplicateOfId) : undefined}
+              outputTargets={outputs}
             />
           );
         })}
       </div>
 
-      <div className="bottom-composer">
-        <textarea
-          value={additionText}
-          onChange={(e) => onAdditionChange(e.target.value)}
-          placeholder="Add more input at the bottom..."
-          rows={3}
-        />
-        <button
-          className="process-stream-btn"
-          onClick={onAddInputBatch}
-          disabled={additionText.trim() === ''}
-        >
-          Add input
-        </button>
-      </div>
+      {items.length > 0 && (
+        showAdditionComposer ? (
+          <div className="bottom-composer">
+            <textarea
+              value={additionText}
+              onChange={(e) => onAdditionChange(e.target.value)}
+              placeholder="Add more input..."
+              rows={3}
+              autoFocus
+            />
+            <div className="composer-actions">
+              <button
+                className="secondary-btn"
+                onClick={() => setShowAdditionComposer(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="process-stream-btn"
+                onClick={handleAddMore}
+                disabled={additionText.trim() === ''}
+              >
+                Add
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="bottom-add-row">
+            <button className="secondary-btn" onClick={() => setShowAdditionComposer(true)}>
+              Add more input
+            </button>
+          </div>
+        )
+      )}
     </div>
   );
 }

@@ -18,18 +18,18 @@ import {
 } from '@dnd-kit/sortable';
 import { Output, StackItem } from '@/types';
 import StackItemComponent from './StackItemComponent';
-import { CloseIcon, PlusIcon, TrashIcon } from './Icons';
+import { CloseIcon, CopyIcon, PlusIcon, TrashIcon } from './Icons';
 
 interface StackPaneProps {
   outputs: Output[];
   activeOutputId: string;
   onSelectOutput: (id: string) => void;
   onCreateOutput: () => void;
-  onCreateEisenhower: () => void;
-  onCreateCategories: () => void;
   onDeleteItem: (id: string) => void;
   onEditItem: (id: string, text: string) => void;
   onClearAll: () => void;
+  onDeleteOutput: () => void;
+  onCopyOutput: () => void;
   onReorder: (items: StackItem[]) => void;
   onAddToTodoist?: () => void;
   todoistEnabled: boolean;
@@ -41,11 +41,11 @@ export default function StackPane({
   activeOutputId,
   onSelectOutput,
   onCreateOutput,
-  onCreateEisenhower,
-  onCreateCategories,
   onDeleteItem,
   onEditItem,
   onClearAll,
+  onDeleteOutput,
+  onCopyOutput,
   onReorder,
   onAddToTodoist,
   todoistEnabled,
@@ -101,35 +101,47 @@ export default function StackPane({
     <div className="stack-pane">
       <div className="stack-header pane-header">
         <div className="output-switcher">
-          {outputs.map(output => (
-            <button
-              key={output.id}
-              className={`output-tab ${output.id === activeOutputId ? 'active' : ''}`}
-              onClick={() => onSelectOutput(output.id)}
-            >
-              <span>{output.name}</span>
-              <strong>{output.items.length}</strong>
-            </button>
-          ))}
-          <button className="output-tab add-output-tab" onClick={onCreateOutput} data-tooltip="New custom output">
+          {outputs.map(output => {
+            const isActive = output.id === activeOutputId;
+
+            return (
+              <div
+                key={output.id}
+                className={`output-tab-shell ${isActive ? 'active' : ''}`}
+              >
+                <button
+                  className="output-tab"
+                  onClick={() => onSelectOutput(output.id)}
+                >
+                  <span>{output.name}</span>
+                  <strong>{output.items.length}</strong>
+                </button>
+                {isActive && outputs.length > 1 && (
+                  <button
+                    className="output-tab-delete"
+                    onClick={onDeleteOutput}
+                    data-tooltip={`Delete ${output.name}`}
+                    aria-label={`Delete ${output.name}`}
+                  >
+                    <CloseIcon size={13} />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+          <button
+            className="output-tab add-output-tab"
+            onClick={onCreateOutput}
+            data-tooltip="New output"
+            aria-label="New output"
+          >
             <PlusIcon size={14} />
           </button>
         </div>
 
-        <div className="stack-header-content">
-          <div className="pane-title-block">
-            <div className="pane-title-row">
-              <h2>Output</h2>
-              <span className="count-pill">{items.length}</span>
-            </div>
-            <div className="pane-meta-row">
-              <span>{filteredItems.length} visible</span>
-            </div>
-          </div>
-          <div className="output-actions">
-            <button className="preset-btn" onClick={onCreateEisenhower}>Eisenhower</button>
-            <button className="preset-btn" onClick={onCreateCategories}>Categories</button>
-            {todoistEnabled && (
+        {todoistEnabled && (
+          <div className="stack-header-content">
+            <div className="output-actions">
               <button
                 className="preset-btn todoist-btn"
                 onClick={onAddToTodoist}
@@ -137,46 +149,59 @@ export default function StackPane({
               >
                 {todoistBusy ? 'Sending...' : 'Todoist'}
               </button>
-            )}
-            {items.length > 1 && (
-              <button
-                onClick={onClearAll}
-                className="stack-action-btn clear-all-btn"
-                data-tooltip="Clear active output"
-                data-tooltip-position="bottom"
-                aria-label="Clear active output"
-              >
-                <TrashIcon size={18} />
-              </button>
-            )}
+            </div>
           </div>
-        </div>
+        )}
 
         {items.length > 0 && (
-          <div className="search-container">
-            <input
-              type="text"
-              className="search-input"
-              placeholder="Search output..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={handleSearchKeyDown}
-            />
-            {searchQuery && (
+          <div className="output-toolbar">
+            <div className="search-container">
+              <input
+                type="text"
+                className="search-input"
+                placeholder="Search output..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
+              />
+              {searchQuery && (
+                <button
+                  className="search-clear"
+                  onClick={() => setSearchQuery('')}
+                  data-tooltip="Clear search"
+                  aria-label="Clear search"
+                >
+                  <CloseIcon size={14} />
+                </button>
+              )}
+              {searchQuery && (
+                <span className="search-count">
+                  Showing {filteredItems.length} of {items.length}
+                </span>
+              )}
+            </div>
+            <div className="output-toolbar-actions">
               <button
-                className="search-clear"
-                onClick={() => setSearchQuery('')}
-                data-tooltip="Clear search"
-                aria-label="Clear search"
+                onClick={onCopyOutput}
+                className="stack-action-btn"
+                data-tooltip="Copy this output"
+                data-tooltip-position="bottom"
+                aria-label="Copy this output"
               >
-                <CloseIcon size={14} />
+                <CopyIcon size={18} />
               </button>
-            )}
-            {searchQuery && (
-              <span className="search-count">
-                Showing {filteredItems.length} of {items.length}
-              </span>
-            )}
+              {items.length > 1 && (
+                <button
+                  onClick={onClearAll}
+                  className="stack-action-btn clear-all-btn"
+                  data-tooltip="Clear output items"
+                  data-tooltip-position="bottom"
+                  aria-label="Clear output items"
+                >
+                  <TrashIcon size={18} />
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>

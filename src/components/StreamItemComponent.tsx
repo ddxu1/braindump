@@ -2,22 +2,26 @@
 
 import { StreamItem } from '@/types';
 import { useState } from 'react';
-import { ArrowRightIcon, CloseIcon, HelpIcon, MoreIcon, NoteIcon } from './Icons';
+import { CloseIcon, HelpIcon, MoreIcon, NoteIcon } from './Icons';
+
+interface OutputTarget {
+  id: string;
+  name: string;
+}
 
 interface StreamItemComponentProps {
   item: StreamItem;
   selected: boolean;
   onDelete: () => void;
-  onMoveToStack: () => void;
+  onMoveToStack: (outputId: string) => void;
   onAddContext: (context: string) => void;
   onEditText: (text: string) => void;
-  onToggleSelect: () => void;
-  onPointerSelectStart: () => void;
-  onPointerSelectEnter: () => void;
+  onSelectClick: (shiftKey: boolean) => void;
   isDuplicate?: boolean;
   duplicateOfText?: string;
   duplicateSource?: 'input' | 'output';
   onMerge?: () => void;
+  outputTargets: OutputTarget[];
 }
 
 export default function StreamItemComponent({
@@ -27,13 +31,12 @@ export default function StreamItemComponent({
   onMoveToStack,
   onAddContext,
   onEditText,
-  onToggleSelect,
-  onPointerSelectStart,
-  onPointerSelectEnter,
+  onSelectClick,
   isDuplicate = false,
   duplicateOfText,
   duplicateSource,
   onMerge,
+  outputTargets,
 }: StreamItemComponentProps) {
   const [showContextInput, setShowContextInput] = useState(false);
   const [contextText, setContextText] = useState(item.context || '');
@@ -58,10 +61,13 @@ export default function StreamItemComponent({
   return (
     <div
       className={`stream-item ${isDuplicate ? 'duplicate' : ''} ${selected ? 'selected' : ''}`}
-      onPointerEnter={onPointerSelectEnter}
     >
       {isDuplicate && duplicateOfText && (
-        <div className={`duplicate-indicator ${duplicateSource === 'output' ? 'output-match' : ''}`}>
+        <div
+          className={`duplicate-indicator ${duplicateSource === 'output' ? 'output-match' : ''}`}
+          aria-label={`${duplicateSource === 'output' ? 'Already in Output' : 'Duplicate of'}: ${duplicateOfText}`}
+          title={duplicateSource === 'output' ? `Already in Output: ${duplicateOfText}` : undefined}
+        >
           {duplicateSource === 'output' ? 'Already in Output' : 'Duplicate of'}: &ldquo;{duplicateOfText}&rdquo;
           {onMerge && (
             <button onClick={onMerge} className="merge-btn">
@@ -74,13 +80,9 @@ export default function StreamItemComponent({
         <button
           type="button"
           className="select-handle"
-          onClick={onToggleSelect}
-          onPointerDown={(e) => {
-            e.preventDefault();
-            onPointerSelectStart();
-          }}
+          onClick={(e) => onSelectClick(e.shiftKey)}
           aria-label={selected ? 'Deselect input item' : 'Select input item'}
-          data-tooltip="Drag to select"
+          data-tooltip="Select. Shift-click selects a range."
         >
           <span />
         </button>
@@ -128,14 +130,18 @@ export default function StreamItemComponent({
         </div>
 
         <div className="item-actions">
-          <button
-            onClick={onMoveToStack}
-            data-tooltip="Move to Output"
-            aria-label="Move to Output"
-            className="action-btn move-btn"
-          >
-            <ArrowRightIcon />
-          </button>
+          <div className="send-targets" aria-label="Send to output">
+            {outputTargets.map(output => (
+              <button
+                key={output.id}
+                onClick={() => onMoveToStack(output.id)}
+                className="send-target-btn"
+                title={`Send to ${output.name}`}
+              >
+                {output.name}
+              </button>
+            ))}
+          </div>
           <button
             onClick={onDelete}
             data-tooltip="Delete"

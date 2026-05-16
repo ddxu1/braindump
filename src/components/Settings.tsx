@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { AppSettings, BulletStyle, loadSettings, saveSettings } from '@/utils/settings';
+import { applyTheme, DEFAULT_THEME, loadTheme, THEMES, ThemeId } from '@/utils/theme';
 import { CloseIcon, SettingsIcon } from './Icons';
 
 interface SettingsProps {
@@ -11,7 +12,23 @@ interface SettingsProps {
 export default function Settings({ onChange }: SettingsProps) {
   const [open, setOpen] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(loadSettings);
+  const [theme, setTheme] = useState<ThemeId>(DEFAULT_THEME);
   const [showTodoistKey, setShowTodoistKey] = useState(false);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setTheme(loadTheme()));
+
+    const handleThemeChange = (event: Event) => {
+      const nextTheme = (event as CustomEvent<ThemeId>).detail;
+      if (nextTheme) setTheme(nextTheme);
+    };
+
+    window.addEventListener('braindump-theme-change', handleThemeChange);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('braindump-theme-change', handleThemeChange);
+    };
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -30,6 +47,10 @@ export default function Settings({ onChange }: SettingsProps) {
   };
 
   const updateBulletStyle = (bulletStyle: BulletStyle) => update({ bulletStyle });
+  const updateTheme = (themeId: ThemeId) => {
+    setTheme(themeId);
+    applyTheme(themeId);
+  };
 
   return (
     <>
@@ -92,6 +113,37 @@ export default function Settings({ onChange }: SettingsProps) {
                     <code className="settings-option-preview">- item</code>
                   </div>
                 </label>
+              </div>
+            </div>
+
+            <div className="settings-section">
+              <label className="settings-label">Theme</label>
+              <p className="settings-description">
+                Choose the app color palette.
+              </p>
+              <div className="settings-options theme-options">
+                {THEMES.map(themeOption => (
+                  <label
+                    key={themeOption.id}
+                    className={`settings-option theme-option ${theme === themeOption.id ? 'active' : ''}`}
+                  >
+                    <input
+                      type="radio"
+                      name="theme"
+                      value={themeOption.id}
+                      checked={theme === themeOption.id}
+                      onChange={() => updateTheme(themeOption.id)}
+                    />
+                    <span
+                      className="theme-swatch"
+                      style={{ background: themeOption.accent }}
+                      aria-hidden
+                    />
+                    <div className="settings-option-body">
+                      <div className="settings-option-title">{themeOption.name}</div>
+                    </div>
+                  </label>
+                ))}
               </div>
             </div>
 

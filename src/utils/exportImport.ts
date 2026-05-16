@@ -28,7 +28,7 @@ const copyMarkdownToClipboard = async (markdown: string): Promise<void> => {
     position: fixed;
     top: 20px;
     right: 20px;
-    background: #1db954;
+    background: var(--accent);
     color: white;
     padding: 12px 24px;
     border-radius: 8px;

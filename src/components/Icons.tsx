@@ -43,6 +43,16 @@ export const MoonIcon = ({ size = 18, className }: IconProps) => (
   </svg>
 );
 
+export const PaletteIcon = ({ size = 18, className }: IconProps) => (
+  <svg {...baseProps(size, className)}>
+    <circle cx="13.5" cy="6.5" r=".5" fill="currentColor" />
+    <circle cx="17.5" cy="10.5" r=".5" fill="currentColor" />
+    <circle cx="8.5" cy="7.5" r=".5" fill="currentColor" />
+    <circle cx="6.5" cy="12.5" r=".5" fill="currentColor" />
+    <path d="M12 22a10 10 0 1 1 10-10 3.5 3.5 0 0 1-3.5 3.5h-1.8a2 2 0 0 0-1.4 3.4l.4.4A1.6 1.6 0 0 1 14.6 22Z" />
+  </svg>
+);
+
 export const DownloadIcon = ({ size = 18, className }: IconProps) => (
   <svg {...baseProps(size, className)}>
     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />

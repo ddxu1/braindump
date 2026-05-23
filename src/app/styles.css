@@ -809,8 +809,15 @@ button {
 }
 
 .stream-item {
+  height: 72px;
   min-height: 66px;
+  overflow: hidden;
   padding: 0.7rem;
+}
+
+.stream-item.expanded {
+  height: auto;
+  overflow: visible;
 }
 
 .stream-item:hover,
@@ -881,6 +888,7 @@ button {
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 0.7rem;
   align-items: start;
+  min-height: 32px;
 }
 
 .select-handle {
@@ -914,11 +922,13 @@ button {
 
 .item-actions {
   display: flex;
+  align-self: start;
   align-items: center;
   justify-content: flex-end;
   gap: 0.25rem;
   max-width: 100%;
-  flex-wrap: wrap;
+  min-height: 32px;
+  flex-wrap: nowrap;
 }
 
 .action-btn {
@@ -946,7 +956,18 @@ button {
   align-items: center;
   justify-content: flex-end;
   gap: 0.35rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+}
+
+.send-targets {
+  min-width: 0;
+  max-width: min(100%, 50vw);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.send-targets::-webkit-scrollbar {
+  display: none;
 }
 
 .send-target-btn {
@@ -997,6 +1018,10 @@ button {
 
 .stream-item .item-text {
   padding-top: 0.15rem;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .item-text:hover {

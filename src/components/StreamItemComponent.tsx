@@ -57,10 +57,11 @@ export default function StreamItemComponent({
   };
 
   const isOld = renderedAt - item.createdAt > 24 * 60 * 60 * 1000;
+  const isExpanded = isDuplicate || Boolean(item.context) || showContextInput;
 
   return (
     <div
-      className={`stream-item ${isDuplicate ? 'duplicate' : ''} ${selected ? 'selected' : ''}`}
+      className={`stream-item ${isDuplicate ? 'duplicate' : ''} ${selected ? 'selected' : ''} ${isExpanded ? 'expanded' : ''}`}
     >
       {isDuplicate && duplicateOfText && (
         <div
@@ -102,7 +103,12 @@ export default function StreamItemComponent({
               />
             </div>
           ) : (
-            <div className="item-text" onClick={() => setIsEditing(true)} style={{ cursor: 'pointer' }}>
+            <div
+              className="item-text"
+              onClick={() => setIsEditing(true)}
+              title={item.text}
+              style={{ cursor: 'pointer' }}
+            >
               {item.text}
             </div>
           )}

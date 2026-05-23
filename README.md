@@ -10,6 +10,7 @@ BrainDump is a Next.js app for turning raw input into organized outputs.
 - Preserve added input batches for later reconstruction.
 - Optionally send Output items to Todoist with a locally stored API key.
 - Export and import app state.
+- Choose between dark, light, and accent color themes.
 - Store data locally in the browser.
 
 ## Development

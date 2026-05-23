@@ -140,7 +140,12 @@ export default function Settings({ onChange }: SettingsProps) {
                       aria-hidden
                     />
                     <div className="settings-option-body">
-                      <div className="settings-option-title">{themeOption.name}</div>
+                      <div className="settings-option-title-row">
+                        <div className="settings-option-title">{themeOption.name}</div>
+                        <span className={`theme-mode-badge ${themeOption.mode}`}>
+                          {themeOption.mode}
+                        </span>
+                      </div>
                     </div>
                   </label>
                 ))}

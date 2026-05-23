@@ -387,7 +387,7 @@ button {
   width: 100%;
   min-height: 38px;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 0.6rem;
   padding: 0 0.55rem;
@@ -412,6 +412,29 @@ button {
   border-color: var(--accent);
   background: var(--accent-soft);
   color: var(--text-primary);
+}
+
+.theme-mode-badge {
+  justify-self: end;
+  padding: 0.12rem 0.38rem;
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.theme-mode-badge.light {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.theme-mode-badge.dark {
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .export-import {
@@ -1849,12 +1872,25 @@ button {
 .settings-option-body {
   display: grid;
   gap: 0.18rem;
+  min-width: 0;
+}
+
+.settings-option-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-width: 0;
 }
 
 .settings-option-title {
+  min-width: 0;
   color: var(--text-primary);
   font-size: 0.9rem;
   font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .settings-option-preview,

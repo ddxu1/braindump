@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { applyTheme, DEFAULT_THEME, getTheme, loadTheme, THEMES, ThemeId } from '@/utils/theme';
-import { CheckIcon, PaletteIcon } from './Icons';
+import { CheckIcon, MoonIcon, SunIcon } from './Icons';
 
 export default function ThemeToggle() {
   const [theme, setTheme] = useState<ThemeId>(DEFAULT_THEME);
@@ -51,6 +51,7 @@ export default function ThemeToggle() {
   };
 
   const themeOption = getTheme(theme);
+  const ThemeModeIcon = themeOption.mode === 'light' ? SunIcon : MoonIcon;
 
   return (
     <div className="theme-picker" ref={wrapperRef}>
@@ -63,7 +64,7 @@ export default function ThemeToggle() {
         aria-haspopup="menu"
         aria-expanded={open}
       >
-        <PaletteIcon />
+        <ThemeModeIcon />
       </button>
 
       {open && (
@@ -83,6 +84,9 @@ export default function ThemeToggle() {
                 aria-hidden
               />
               <span>{themeItem.name}</span>
+              <span className={`theme-mode-badge ${themeItem.mode}`}>
+                {themeItem.mode}
+              </span>
               {theme === themeItem.id && <CheckIcon size={14} />}
             </button>
           ))}

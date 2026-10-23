@@ -1,4 +1,4 @@
-export type BulletStyle = 'checkbox' | 'dash';
+export type BulletStyle = 'star' | 'dash';
 
 export interface AppSettings {
   bulletStyle: BulletStyle;
@@ -8,7 +8,7 @@ export interface AppSettings {
 const SETTINGS_KEY = 'braindump-settings';
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  bulletStyle: 'checkbox',
+  bulletStyle: 'star',
   todoistApiKey: '',
 };
 
@@ -19,7 +19,11 @@ export const loadSettings = (): AppSettings => {
     const serialized = localStorage.getItem(SETTINGS_KEY);
     if (!serialized) return DEFAULT_SETTINGS;
     const parsed = JSON.parse(serialized);
-    return { ...DEFAULT_SETTINGS, ...parsed };
+    return {
+      ...DEFAULT_SETTINGS,
+      ...parsed,
+      bulletStyle: parsed.bulletStyle === 'dash' ? 'dash' : 'star',
+    };
   } catch {
     return DEFAULT_SETTINGS;
   }
@@ -35,5 +39,5 @@ export const saveSettings = (settings: AppSettings): void => {
 };
 
 export const formatBullet = (text: string, style: BulletStyle): string => {
-  return style === 'checkbox' ? `- [ ] ${text}` : `- ${text}`;
+  return style === 'star' ? `* ${text}` : `- ${text}`;
 };

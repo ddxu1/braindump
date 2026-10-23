@@ -1,6 +1,7 @@
 import { AppState, Output, StackItem, StreamItem } from '@/types';
 
 const STORAGE_KEY = 'braindump-app-state';
+const INPUT_DRAFT_STORAGE_KEY = 'braindump-input-draft';
 const DEFAULT_OUTPUT_ID = 'output-inbox';
 
 type LegacyStackItem = StackItem & {
@@ -79,14 +80,69 @@ export const loadState = (): AppState => {
   }
 };
 
-export const saveState = (state: AppState): void => {
-  if (typeof window === 'undefined') return;
+export const saveState = (state: AppState): boolean => {
+  if (typeof window === 'undefined') return false;
 
   try {
     const serialized = JSON.stringify(state);
     localStorage.setItem(STORAGE_KEY, serialized);
+    return true;
   } catch (err) {
     console.error('Failed to save state:', err);
+    return false;
+  }
+};
+
+export const loadInputDraft = (): string => {
+  if (typeof window === 'undefined') return '';
+
+  try {
+    return localStorage.getItem(INPUT_DRAFT_STORAGE_KEY) ?? '';
+  } catch (err) {
+    console.error('Failed to load input draft:', err);
+    return '';
+  }
+};
+
+export const saveInputDraft = (text: string): boolean => {
+  if (typeof window === 'undefined') return false;
+
+  try {
+    if (text) {
+      localStorage.setItem(INPUT_DRAFT_STORAGE_KEY, text);
+    } else {
+      localStorage.removeItem(INPUT_DRAFT_STORAGE_KEY);
+    }
+    return true;
+  } catch (err) {
+    console.error('Failed to save input draft:', err);
+    return false;
+  }
+};
+
+export const commitStateAndClearDraft = (state: AppState, draft: string): boolean => {
+  if (typeof window === 'undefined') return false;
+
+  try {
+    const previousDraft = localStorage.getItem(INPUT_DRAFT_STORAGE_KEY);
+
+    // Free the draft's storage before expanding the committed state. If the
+    // state write fails, restore the last draft that was known to be durable.
+    localStorage.removeItem(INPUT_DRAFT_STORAGE_KEY);
+    if (saveState(state)) return true;
+
+    if (previousDraft === null) {
+      localStorage.removeItem(INPUT_DRAFT_STORAGE_KEY);
+    } else {
+      localStorage.setItem(INPUT_DRAFT_STORAGE_KEY, previousDraft);
+    }
+    return false;
+  } catch (err) {
+    console.error('Failed to commit state and clear input draft:', err);
+    // The current draft remains in React state even if browser storage is
+    // unavailable, and the UI warns the user to keep the tab open or export.
+    void draft;
+    return false;
   }
 };
 

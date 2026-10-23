@@ -1,7 +1,8 @@
 'use client';
 
 import { StreamItem } from '@/types';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { EditIcon } from './Icons';
 
 type Action = 'stayed' | 'deleted' | 'moved';
 
@@ -10,6 +11,7 @@ interface ProcessingModeProps {
   onKeep: (id: string) => void;
   onMoveToStack: (id: string) => void;
   onDelete: (id: string) => void;
+  onEdit: (id: string, text: string) => void;
   onClose: () => void;
 }
 
@@ -18,12 +20,17 @@ export default function ProcessingMode({
   onKeep,
   onMoveToStack,
   onDelete,
+  onEdit,
   onClose,
 }: ProcessingModeProps) {
-  const [queue] = useState<StreamItem[]>(() => items);
+  const [queue, setQueue] = useState<StreamItem[]>(() => items);
   const [actions, setActions] = useState<Record<string, Action>>({});
   const [index, setIndex] = useState(0);
   const [openedAt] = useState(() => Date.now());
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState('');
+  const cancelEditRef = useRef(false);
+  const modalRef = useRef<HTMLDivElement>(null);
 
   const current = queue[index];
   const isComplete = !current;
@@ -49,8 +56,54 @@ export default function ProcessingMode({
     setIndex(i => i + 1);
   };
 
+  const startEditing = () => {
+    if (!current) return;
+    cancelEditRef.current = false;
+    setEditText(current.text);
+    setIsEditing(true);
+  };
+
+  const finishEditing = () => {
+    if (!current) return;
+    if (cancelEditRef.current) {
+      cancelEditRef.current = false;
+      setIsEditing(false);
+      return;
+    }
+
+    const nextText = editText.trim();
+    if (nextText && nextText !== current.text) {
+      setQueue(previous => previous.map(item =>
+        item.id === current.id ? { ...item, text: nextText } : item
+      ));
+      onEdit(current.id, nextText);
+    }
+    setIsEditing(false);
+  };
+
+  const handleEditKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.currentTarget.blur();
+    }
+
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      cancelEditRef.current = true;
+      e.currentTarget.blur();
+    }
+  };
+
+  useEffect(() => {
+    modalRef.current?.focus();
+  }, []);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.matches('input, textarea, [contenteditable="true"]')) return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+
       if (isComplete) {
         if (e.key === 'Escape' || e.key === 'Enter') {
           e.preventDefault();
@@ -59,7 +112,7 @@ export default function ProcessingMode({
         return;
       }
       const k = e.key.toLowerCase();
-      if (k === 'w') {
+      if (k === 'a' || e.key === 'Backspace') {
         e.preventDefault();
         handleDelete();
       } else if (k === 's') {
@@ -81,7 +134,7 @@ export default function ProcessingMode({
   if (isComplete) {
     return (
       <div className="processing-mode">
-        <div className="processing-modal">
+        <div className="processing-modal" ref={modalRef} tabIndex={-1}>
           <div className="processing-header">
             <h3>Processing Complete</h3>
             <button
@@ -136,7 +189,7 @@ export default function ProcessingMode({
 
   return (
     <div className="processing-mode">
-      <div className="processing-modal">
+      <div className="processing-modal" ref={modalRef} tabIndex={-1}>
         <div className="processing-header">
           <h3>Process Input</h3>
           <div className="processing-progress">
@@ -156,10 +209,37 @@ export default function ProcessingMode({
           {renderPast(prev1, 'p1')}
 
           <div className="deck-card current">
-            <div className="deck-text">{current.text}</div>
+            {isEditing ? (
+              <input
+                className="processing-edit-input"
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                onKeyDown={handleEditKeyDown}
+                onBlur={finishEditing}
+                aria-label="Edit current input"
+                autoFocus
+              />
+            ) : (
+              <button
+                type="button"
+                className="deck-text processing-text-button"
+                onClick={startEditing}
+                aria-label="Edit current input"
+              >
+                {current.text}
+              </button>
+            )}
             <div className="deck-meta">
-              {itemAge < 1 ? 'just created' : `${itemAge}h old`}
-              {current.context && ` • ${current.context}`}
+              <span>
+                {itemAge < 1 ? 'just created' : `${itemAge}h old`}
+                {current.context && ` • ${current.context}`}
+              </span>
+              {!isEditing && (
+                <button className="processing-edit-btn" onClick={startEditing}>
+                  <EditIcon size={13} />
+                  Edit
+                </button>
+              )}
             </div>
           </div>
 
@@ -169,7 +249,7 @@ export default function ProcessingMode({
 
         <div className="processing-actions">
           <button onClick={handleDelete} className="processing-btn delete">
-            <span className="shortcut">W</span>
+            <span className="shortcut">A / ⌫</span>
             Delete
           </button>
           <button onClick={handleStay} className="processing-btn keep">

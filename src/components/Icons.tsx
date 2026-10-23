@@ -76,6 +76,13 @@ export const CopyIcon = ({ size = 18, className }: IconProps) => (
   </svg>
 );
 
+export const EditIcon = ({ size = 16, className }: IconProps) => (
+  <svg {...baseProps(size, className)}>
+    <path d="M12 20h9" />
+    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+  </svg>
+);
+
 export const SettingsIcon = ({ size = 18, className }: IconProps) => (
   <svg {...baseProps(size, className)}>
     <circle cx="12" cy="12" r="3" />

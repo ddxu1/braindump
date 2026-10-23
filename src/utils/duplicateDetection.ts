@@ -107,8 +107,9 @@ export function findInputMatches(
   for (const inputItem of inputItems) {
     if (matches.get(inputItem.id)?.source === 'input') continue;
 
-    const outputMatch = outputItems.find(outputItem =>
-      calculateSimilarity(inputItem.text, outputItem.text) >= threshold
+    const normalizedInputText = inputItem.text.trim().toLowerCase();
+    const outputMatch = outputItems.find(
+      outputItem => outputItem.text.trim().toLowerCase() === normalizedInputText
     );
 
     if (outputMatch) {

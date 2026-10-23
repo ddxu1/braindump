@@ -56,12 +56,19 @@ export default function StreamItemComponent({
     setIsEditing(false);
   };
 
+  const startTextEdit = () => {
+    setEditText(item.text);
+    setIsEditing(true);
+  };
+
   const isOld = renderedAt - item.createdAt > 24 * 60 * 60 * 1000;
   const isExpanded = isDuplicate || Boolean(item.context) || showContextInput;
 
   return (
     <div
       className={`stream-item ${isDuplicate ? 'duplicate' : ''} ${selected ? 'selected' : ''} ${isExpanded ? 'expanded' : ''}`}
+      data-input-id={item.id}
+      tabIndex={-1}
     >
       {isDuplicate && duplicateOfText && (
         <div
@@ -83,7 +90,7 @@ export default function StreamItemComponent({
           className="select-handle"
           onClick={(e) => onSelectClick(e.shiftKey)}
           aria-label={selected ? 'Deselect input item' : 'Select input item'}
-          data-tooltip="Select. Shift-click selects a range."
+          data-tooltip="Select. Use arrows to move, Shift+arrows for a range, Backspace to delete."
         >
           <span />
         </button>
@@ -105,7 +112,7 @@ export default function StreamItemComponent({
           ) : (
             <div
               className="item-text"
-              onClick={() => setIsEditing(true)}
+              onClick={startTextEdit}
               title={item.text}
               style={{ cursor: 'pointer' }}
             >
@@ -136,18 +143,6 @@ export default function StreamItemComponent({
         </div>
 
         <div className="item-actions">
-          <div className="send-targets" aria-label="Send to output">
-            {outputTargets.map(output => (
-              <button
-                key={output.id}
-                onClick={() => onMoveToStack(output.id)}
-                className="send-target-btn"
-                title={`Send to ${output.name}`}
-              >
-                {output.name}
-              </button>
-            ))}
-          </div>
           <button
             onClick={onDelete}
             data-tooltip="Delete"
@@ -169,6 +164,19 @@ export default function StreamItemComponent({
               <HelpIcon />
             </span>
           )}
+        </div>
+
+        <div className="send-targets" aria-label="Send to output">
+          {outputTargets.map(output => (
+            <button
+              key={output.id}
+              onClick={() => onMoveToStack(output.id)}
+              className="send-target-btn"
+              title={`Send to ${output.name}`}
+            >
+              {output.name}
+            </button>
+          ))}
         </div>
       </div>
     </div>

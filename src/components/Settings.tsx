@@ -86,17 +86,17 @@ export default function Settings({ onChange }: SettingsProps) {
                 How items are formatted when copying the Output as markdown.
               </p>
               <div className="settings-options">
-                <label className={`settings-option ${settings.bulletStyle === 'checkbox' ? 'active' : ''}`}>
+                <label className={`settings-option ${settings.bulletStyle === 'star' ? 'active' : ''}`}>
                   <input
                     type="radio"
                     name="bulletStyle"
-                    value="checkbox"
-                    checked={settings.bulletStyle === 'checkbox'}
-                    onChange={() => updateBulletStyle('checkbox')}
+                    value="star"
+                    checked={settings.bulletStyle === 'star'}
+                    onChange={() => updateBulletStyle('star')}
                   />
                   <div className="settings-option-body">
-                    <div className="settings-option-title">Checkbox</div>
-                    <code className="settings-option-preview">- [ ] item</code>
+                    <div className="settings-option-title">Star</div>
+                    <code className="settings-option-preview">* item</code>
                   </div>
                 </label>
 

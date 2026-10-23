@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -18,12 +18,13 @@ import {
 } from '@dnd-kit/sortable';
 import { Output, StackItem } from '@/types';
 import StackItemComponent from './StackItemComponent';
-import { CloseIcon, CopyIcon, PlusIcon, TrashIcon } from './Icons';
+import { CloseIcon, CopyIcon, EditIcon, PlusIcon, TrashIcon } from './Icons';
 
 interface StackPaneProps {
   outputs: Output[];
   activeOutputId: string;
   onSelectOutput: (id: string) => void;
+  onRenameOutput: (id: string, name: string) => void;
   onCreateOutput: () => void;
   onDeleteItem: (id: string) => void;
   onEditItem: (id: string, text: string) => void;
@@ -40,6 +41,7 @@ export default function StackPane({
   outputs,
   activeOutputId,
   onSelectOutput,
+  onRenameOutput,
   onCreateOutput,
   onDeleteItem,
   onEditItem,
@@ -52,6 +54,9 @@ export default function StackPane({
   todoistBusy,
 }: StackPaneProps) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [editingOutputId, setEditingOutputId] = useState<string | null>(null);
+  const [editingOutputName, setEditingOutputName] = useState('');
+  const cancelRenameRef = useRef(false);
   const activeOutput = useMemo(
     () => outputs.find(output => output.id === activeOutputId) ?? outputs[0],
     [outputs, activeOutputId]
@@ -78,6 +83,39 @@ export default function StackPane({
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Escape') {
       setSearchQuery('');
+    }
+  };
+
+  const startRenamingOutput = (output: Output) => {
+    cancelRenameRef.current = false;
+    setEditingOutputId(output.id);
+    setEditingOutputName(output.name);
+  };
+
+  const finishRenamingOutput = () => {
+    if (cancelRenameRef.current) {
+      cancelRenameRef.current = false;
+      setEditingOutputId(null);
+      return;
+    }
+
+    const name = editingOutputName.trim();
+    if (editingOutputId && name) {
+      onRenameOutput(editingOutputId, name);
+    }
+    setEditingOutputId(null);
+  };
+
+  const handleRenameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.currentTarget.blur();
+    }
+
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      cancelRenameRef.current = true;
+      e.currentTarget.blur();
     }
   };
 
@@ -109,16 +147,40 @@ export default function StackPane({
                 key={output.id}
                 className={`output-tab-shell ${isActive ? 'active' : ''}`}
               >
-                <button
-                  className="output-tab"
-                  onClick={() => onSelectOutput(output.id)}
-                >
-                  <span>{output.name}</span>
-                  <strong>{output.items.length}</strong>
-                </button>
+                {editingOutputId === output.id ? (
+                  <input
+                    className="output-tab-rename-input"
+                    value={editingOutputName}
+                    onChange={(e) => setEditingOutputName(e.target.value)}
+                    onKeyDown={handleRenameKeyDown}
+                    onBlur={finishRenamingOutput}
+                    onFocus={(e) => e.currentTarget.select()}
+                    aria-label={`Rename ${output.name}`}
+                    autoFocus
+                  />
+                ) : (
+                  <button
+                    className="output-tab"
+                    onClick={() => onSelectOutput(output.id)}
+                    onDoubleClick={() => startRenamingOutput(output)}
+                  >
+                    <span>{output.name}</span>
+                    <strong>{output.items.length}</strong>
+                  </button>
+                )}
+                {isActive && editingOutputId !== output.id && (
+                  <button
+                    className="output-tab-action output-tab-rename"
+                    onClick={() => startRenamingOutput(output)}
+                    data-tooltip={`Rename ${output.name}`}
+                    aria-label={`Rename ${output.name}`}
+                  >
+                    <EditIcon size={13} />
+                  </button>
+                )}
                 {isActive && outputs.length > 1 && (
                   <button
-                    className="output-tab-delete"
+                    className="output-tab-action output-tab-delete"
                     onClick={onDeleteOutput}
                     data-tooltip={`Delete ${output.name}`}
                     aria-label={`Delete ${output.name}`}

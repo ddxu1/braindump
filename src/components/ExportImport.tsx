@@ -1,24 +1,29 @@
 'use client';
 
 import { AppState } from '@/types';
-import { exportToJSON, importFromJSON } from '@/utils/exportImport';
+import { exportToJSON, importFromJSON, ImportedWorkspace } from '@/utils/exportImport';
 import { useRef, useState } from 'react';
 import { DownloadIcon, UploadIcon } from './Icons';
 
 interface ExportImportProps {
   state: AppState;
-  onImport: (state: AppState) => void;
+  inputText: string;
+  onImport: (workspace: ImportedWorkspace) => void;
 }
 
-export default function ExportImport({ state, onImport }: ExportImportProps) {
+export default function ExportImport({
+  state,
+  inputText,
+  onImport,
+}: ExportImportProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   const handleExport = () => {
     try {
-      exportToJSON(state);
-      setSuccess('Backup exported');
+      exportToJSON(state, { inputText });
+      setSuccess('Workspace exported');
       setError(null);
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
@@ -56,16 +61,17 @@ export default function ExportImport({ state, onImport }: ExportImportProps) {
       <button
         onClick={handleExport}
         className="export-btn icon-btn"
-        data-tooltip="Download backup (JSON)"
+        data-tooltip="Export inputs and outputs"
         data-tooltip-position="bottom"
-        aria-label="Download backup"
+        aria-label="Export workspace"
       >
         <DownloadIcon />
+        <span>Export</span>
       </button>
       <button
         onClick={handleImportClick}
         className="import-btn icon-btn"
-        data-tooltip="Import backup (JSON)"
+        data-tooltip="Import workspace backup"
         data-tooltip-position="bottom"
         aria-label="Import backup"
       >

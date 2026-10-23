@@ -1,9 +1,10 @@
 import { AppState } from '@/types';
 
 export interface HistoryAction {
-  type: 'delete-stack' | 'delete-stream' | 'move-to-stack' | 'clear-all' | 'clear-stream' | 'merge-duplicates' | 'edit-stack' | 'edit-stream' | 'reorder';
+  type: 'delete-stack' | 'delete-stream' | 'move-to-stack' | 'clear-all' | 'clear-stream' | 'merge-duplicates' | 'edit-stack' | 'edit-stream' | 'reorder' | 'rename-output';
   description: string;
   previousState: AppState;
+  previousInputText?: string;
   timestamp: number;
 }
 
